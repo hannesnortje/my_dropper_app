@@ -1,21 +1,37 @@
 #!/bin/bash
 
-# Define the path to your application's directory
-APP_DIR="/home/hannesn/my_dropper_app" # <--- IMPORTANT: Ensure this is your actual path
+# File Dropper & Saver - Launch Script
+# This script provides multiple ways to run the application
 
-# Change to the application directory
-cd "$APP_DIR" || { echo "Error: Could not change to application directory."; exit 1; }
+# Try to run the installed command first
+if command -v my-dropper-app &> /dev/null; then
+    my-dropper-app "$@"
+    exit $?
+fi
 
-# Activate the virtual environment
-source venv/bin/activate || { echo "Error: Could not activate virtual environment."; exit 1; }
+# Try the short alias
+if command -v dropper &> /dev/null; then
+    dropper "$@"
+    exit $?
+fi
 
-# Run the Python application
-python my_dropper_app_qt6.py
+# Fallback: Run from source
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Deactivate the virtual environment (optional, but good practice if you want to clean up)
-# This won't affect the running GUI app, but will deactivate the shell environment
-# from which the app was launched. If you're running this from a terminal,
-# it will deactivate the terminal's venv once the app is closed.
-# For a .desktop file, this line isn't strictly necessary as the shell process
-# for the Exec command exits anyway.
-# deactivate
+# Check for virtual environment in the script directory
+if [ -d "$SCRIPT_DIR/.venv" ]; then
+    source "$SCRIPT_DIR/.venv/bin/activate"
+fi
+
+# Try running as a module first (if installed in dev mode)
+python -m my_dropper_app 2>/dev/null && exit 0
+
+# Fallback to the legacy standalone script
+if [ -f "$SCRIPT_DIR/my_dropper_app_qt6.py" ]; then
+    python "$SCRIPT_DIR/my_dropper_app_qt6.py" "$@"
+    exit $?
+fi
+
+echo "Error: Could not find a way to run the application."
+echo "Please install with: pip install -e . or pipx install git+https://github.com/hannesnortje/my_dropper_app.git"
+exit 1

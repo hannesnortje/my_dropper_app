@@ -43,60 +43,87 @@ A modern, intuitive desktop application built with PyQt6 that allows you to drag
 
 ## Installation
 
-### Option 1: Using Virtual Environment (Recommended)
+### Option 1: Install with pipx (Recommended)
 
-1. Clone or download this repository:
+The easiest way to install is using [pipx](https://pypa.github.io/pipx/), which installs the app in an isolated environment:
+
+```bash
+# Install pipx if you don't have it
+pip install pipx
+pipx ensurepath
+
+# Install directly from GitHub
+pipx install git+https://github.com/hannesnortje/my_dropper_app.git
+
+# Run the app
+my-dropper-app
+# or
+dropper
+```
+
+To update to the latest version:
+```bash
+pipx upgrade my-dropper-app
+```
+
+To uninstall:
+```bash
+pipx uninstall my-dropper-app
+```
+
+### Option 2: Install with pip
+
+```bash
+# Install from GitHub
+pip install git+https://github.com/hannesnortje/my_dropper_app.git
+
+# Run the app
+my-dropper-app
+```
+
+### Option 3: Development Installation
+
+1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/hannesnortje/my_dropper_app.git
    cd my_dropper_app
    ```
 
 2. Create a virtual environment:
    ```bash
    python3 -m venv .venv
-   ```
-
-3. Activate the virtual environment:
-   ```bash
    source .venv/bin/activate  # On Linux/macOS
    # or
    .venv\Scripts\activate     # On Windows
    ```
 
-4. Install dependencies:
+3. Install in development mode:
    ```bash
-   pip install -r requirements.txt
+   pip install -e .
    ```
 
-### Option 2: System-wide Installation
-
-Install PyQt6 directly on your system:
-```bash
-pip install PyQt6
-```
+4. Run the app:
+   ```bash
+   my-dropper-app
+   # or
+   python -m my_dropper_app
+   ```
 
 ## Usage
 
 ### Running the Application
 
-#### Using the Launch Script (Linux/macOS)
-
-1. Make sure the launch script is executable:
-   ```bash
-   chmod +x launch.sh
-   ```
-
-2. Update the `APP_DIR` path in `launch.sh` to match your installation directory
-
-3. Run the application:
-   ```bash
-   ./launch.sh
-   ```
-
-#### Direct Python Execution
+After installation, you can run the app using any of these commands:
 
 ```bash
-python3 my_dropper_app_qt6.py
+# Primary command
+my-dropper-app
+
+# Short alias
+dropper
+
+# As a Python module
+python -m my_dropper_app
 ```
 
 ### How to Use
@@ -138,22 +165,33 @@ The application stores its settings using Qt's QSettings:
 
 ```
 my_dropper_app/
-├── my_dropper_app_qt6.py    # Main application file
-├── requirements.txt         # Python dependencies
-├── launch.sh                # Launch script for Linux/macOS
-├── my_dropper_icon.svg      # Application icon
-├── my_dropper_app_qt6.docx  # Documentation (if applicable)
-├── README.md                # This file
-├── LICENSE                  # GPL-3.0 license
-└── .venv/                   # Virtual environment (if created)
+├── pyproject.toml              # Package configuration
+├── README.md                   # This file
+├── LICENSE                     # GPL-3.0 license
+├── requirements.txt            # Python dependencies (legacy)
+├── my_dropper_app_qt6.py       # Standalone script (legacy)
+├── launch.sh                   # Launch script for Linux/macOS
+├── my_dropper_icon.svg         # Application icon
+└── src/
+    └── my_dropper_app/
+        ├── __init__.py         # Package init with version
+        ├── __main__.py         # Entry point for python -m
+        └── app.py              # Main application code
 ```
 
 ## Development
 
 ### Setting up Development Environment
 
-1. Follow the installation steps above
-2. Make your changes to `my_dropper_app_qt6.py`
+1. Clone and install in development mode:
+   ```bash
+   git clone https://github.com/hannesnortje/my_dropper_app.git
+   cd my_dropper_app
+   pip install -e .
+   ```
+
+2. Make your changes to `src/my_dropper_app/app.py`
+
 3. Test the application:
    ```bash
    python3 my_dropper_app_qt6.py

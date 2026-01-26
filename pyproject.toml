@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my-dropper-app"
+version = "2.0.0"
+description = "A modern drag & drop file organizer with PyQt6 - copy or move files to a destination folder"
+readme = "README.md"
+license = {text = "GPL-3.0-or-later"}
+authors = [
+    {name = "Hannes Nortje"}
+]
+requires-python = ">=3.9"
+keywords = ["file-manager", "drag-drop", "pyqt6", "gui", "file-organizer"]
+dependencies = [
+    "PyQt6>=6.4.0",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Desktop Environment :: File Managers",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/hannesnortje/my_dropper_app"
+Repository = "https://github.com/hannesnortje/my_dropper_app.git"
+Issues = "https://github.com/hannesnortje/my_dropper_app/issues"
+
+[project.gui-scripts]
+my-dropper-app = "my_dropper_app.app:main"
+
+[project.scripts]
+dropper = "my_dropper_app.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+my_dropper_app = ["*.svg", "*.png", "*.ico"]
