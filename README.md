@@ -91,6 +91,87 @@ python -m my_dropper_app  # As module
 5. **Open destination** - Click "📂 Open" to view saved files
 6. **Toggle theme** - Use "🌙 Dark Mode" for a darker interface
 
+### Adding to Application Menu (Linux)
+
+To add File Dropper to your application menu on Ubuntu, Kubuntu, and other Linux distributions:
+
+#### Automatic Setup
+
+Run this command to create the desktop entry:
+
+```bash
+# Find where the command is installed
+DROPPER_PATH=$(which my-dropper-app)
+
+# Create the desktop entry
+cat > ~/.local/share/applications/my-dropper-app.desktop << EOF
+[Desktop Entry]
+Name=File Dropper & Saver
+Comment=Drag and drop file organizer
+Exec=$DROPPER_PATH
+Icon=folder-download
+Terminal=false
+Type=Application
+Categories=Utility;FileTools;
+Keywords=file;drop;copy;move;organize;
+EOF
+
+# Update desktop database
+update-desktop-database ~/.local/share/applications/
+```
+
+#### Manual Setup
+
+1. Create the file `~/.local/share/applications/my-dropper-app.desktop`:
+
+```ini
+[Desktop Entry]
+Name=File Dropper & Saver
+Comment=Drag and drop file organizer
+Exec=/home/YOUR_USERNAME/.local/bin/my-dropper-app
+Icon=folder-download
+Terminal=false
+Type=Application
+Categories=Utility;FileTools;
+Keywords=file;drop;copy;move;organize;
+```
+
+2. Replace `YOUR_USERNAME` with your actual username, or run `which my-dropper-app` to find the correct path.
+
+3. Make it executable (optional but recommended):
+```bash
+chmod +x ~/.local/share/applications/my-dropper-app.desktop
+```
+
+4. Update the desktop database:
+```bash
+update-desktop-database ~/.local/share/applications/
+```
+
+The app should now appear in your application menu under "Utilities" or by searching for "File Dropper".
+
+#### Using a Custom Icon
+
+If you cloned the repository, you can use the included icon:
+
+```bash
+# Copy icon to local icons directory
+mkdir -p ~/.local/share/icons
+cp /path/to/my_dropper_app/my_dropper_icon.svg ~/.local/share/icons/my-dropper-app.svg
+
+# Update the desktop file to use it
+sed -i 's|Icon=folder-download|Icon=my-dropper-app|' ~/.local/share/applications/my-dropper-app.desktop
+```
+
+#### Desktop Environments
+
+| Desktop | Menu Location |
+|---------|--------------|
+| GNOME (Ubuntu) | Activities → Show Applications → search "File Dropper" |
+| KDE Plasma (Kubuntu) | Application Launcher → Utilities |
+| XFCE (Xubuntu) | Applications Menu → Accessories |
+| Cinnamon (Mint) | Menu → Accessories |
+
 ## Configuration
 
 Settings are stored using Qt's QSettings:
