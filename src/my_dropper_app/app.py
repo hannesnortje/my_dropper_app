@@ -68,8 +68,18 @@ SETTINGS_RECENT_DESTINATIONS = "recent_destinations"
 # Default values
 DEFAULT_DEST_DIR = Path.home() / "DroppedFiles_QT6"
 MAX_RECENT_DESTINATIONS = 5
-MAX_FILE_SIZE_WARNING_MB = 1000  # Warn if single file > 1GB
 MAX_COLLISION_ATTEMPTS = 10_000  # Cap on " (N)" / "_NNN" filename rename attempts
+
+# Byte-size constants
+BYTES_PER_KB = 1024
+BYTES_PER_MB = 1024 * BYTES_PER_KB
+BYTES_PER_GB = 1024 * BYTES_PER_MB
+
+# Operation-tuning constants
+COPY_CHUNK_SIZE = BYTES_PER_MB                    # 1 MB chunks in _chunked_copy
+LARGE_FILE_THRESHOLD = 10 * BYTES_PER_MB          # switch to chunked copy above this
+MAX_FILE_SIZE_WARNING_BYTES = 1000 * BYTES_PER_MB # confirm before transfers near 1 GB
+WORKER_SHUTDOWN_TIMEOUT_MS = 5000                 # how long closeEvent waits for worker to finish
 
 # Logging setup
 logging.basicConfig(
@@ -566,7 +576,7 @@ class FileOperationWorker(QThread):
         
         if self.mode == OperationMode.COPY:
             # Use chunked copy for progress on large files
-            if file_size > 10 * 1024 * 1024:  # > 10MB
+            if file_size > LARGE_FILE_THRESHOLD:
                 self._chunked_copy(op.source, dest_path, file_size)
             else:
                 shutil.copy2(op.source, dest_path)
@@ -612,7 +622,7 @@ class FileOperationWorker(QThread):
     
     def _chunked_copy(self, source: Path, dest: Path, total_size: int) -> None:
         """Copy file in chunks for better progress reporting."""
-        chunk_size = 1024 * 1024  # 1MB chunks
+        chunk_size = COPY_CHUNK_SIZE
         copied = 0
         
         with open(source, 'rb') as src, open(dest, 'wb') as dst:
@@ -1161,8 +1171,8 @@ class FileDropperApp(QWidget):
         total_size = sum(
             f.stat().st_size for f in file_paths if f.is_file()
         )
-        if total_size > MAX_FILE_SIZE_WARNING_MB * 1024 * 1024:
-            size_gb = total_size / (1024 * 1024 * 1024)
+        if total_size > MAX_FILE_SIZE_WARNING_BYTES:
+            size_gb = total_size / BYTES_PER_GB
             reply = QMessageBox.question(
                 self,
                 "Large Transfer",
@@ -1233,12 +1243,12 @@ class FileDropperApp(QWidget):
         )
         
         if result.total_bytes > 0:
-            if result.total_bytes > 1024 * 1024 * 1024:
-                size_str = f"{result.total_bytes / (1024*1024*1024):.2f} GB"
-            elif result.total_bytes > 1024 * 1024:
-                size_str = f"{result.total_bytes / (1024*1024):.1f} MB"
+            if result.total_bytes > BYTES_PER_GB:
+                size_str = f"{result.total_bytes / BYTES_PER_GB:.2f} GB"
+            elif result.total_bytes > BYTES_PER_MB:
+                size_str = f"{result.total_bytes / BYTES_PER_MB:.1f} MB"
             else:
-                size_str = f"{result.total_bytes / 1024:.1f} KB"
+                size_str = f"{result.total_bytes / BYTES_PER_KB:.1f} KB"
             self._log(f"📊 Total size: {size_str}")
         
         # Show completion message
@@ -1374,7 +1384,7 @@ class FileDropperApp(QWidget):
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self.worker.cancel()
-                self.worker.wait(5000)  # Wait up to 5 seconds
+                self.worker.wait(WORKER_SHUTDOWN_TIMEOUT_MS)
             else:
                 event.ignore()
                 return
