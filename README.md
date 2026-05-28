@@ -91,6 +91,17 @@ python -m my_dropper_app  # As module
 5. **Open destination** - Click "📂 Open" to view saved files
 6. **Toggle theme** - Use "🌙 Dark Mode" for a darker interface
 
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Browse for destination folder |
+| <kbd>Ctrl</kbd>+<kbd>L</kbd> | Clear the output log |
+| <kbd>Ctrl</kbd>+<kbd>D</kbd> | Toggle dark mode |
+| <kbd>Esc</kbd> | Cancel the running transfer |
+| <kbd>Ctrl</kbd>+<kbd>Q</kbd> | Quit (prompts if a transfer is in progress) |
+| <kbd>F1</kbd> | Show the shortcut reference dialog |
+
 ### Symlink Handling
 
 - **Top-level symlinks are skipped, not followed.** If you drop a symbolic link directly, the app logs `⏭ Skipped symlink (not followed)` and leaves both the link and its target untouched. Drop the real path instead if you want to copy or move it.

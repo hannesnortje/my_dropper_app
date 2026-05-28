@@ -34,7 +34,7 @@ from PyQt6.QtWidgets import (
     QCheckBox, QFrame, QSizePolicy, QComboBox,
 )
 from PyQt6.QtCore import Qt, QEvent, QSettings
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QFont
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QFont, QKeySequence, QShortcut
 
 from my_dropper_app import __version__
 
@@ -83,6 +83,7 @@ class FileDropperApp(QWidget):
 
         self._init_settings()
         self._init_ui()
+        self._init_shortcuts()
         self._apply_theme()
         self._restore_geometry()
 
@@ -288,6 +289,40 @@ class FileDropperApp(QWidget):
         button_layout.addWidget(version_label)
 
         main_layout.addLayout(button_layout)
+
+    def _init_shortcuts(self) -> None:
+        """Wire up global keyboard shortcuts.
+
+        Each shortcut delegates to an existing method/slot so behaviour
+        matches the equivalent click exactly. The shortcuts are bound to
+        `self` so they fire whenever the window has keyboard focus.
+        """
+        bindings: list[tuple[str, callable]] = [
+            ("Ctrl+Q", self.close),
+            ("Ctrl+O", self._browse_destination),
+            ("Ctrl+L", self.output_text.clear),
+            ("Ctrl+D", self.dark_mode_checkbox.toggle),
+            ("Esc",    self._cancel_operation),
+            ("F1",     self._show_help),
+        ]
+        for sequence, slot in bindings:
+            QShortcut(QKeySequence(sequence), self, activated=slot)
+
+    def _show_help(self) -> None:
+        """Display the keyboard-shortcut reference."""
+        QMessageBox.information(
+            self,
+            "Keyboard Shortcuts",
+            "<b>File Dropper &amp; Saver — Keyboard Shortcuts</b><br><br>"
+            "<table cellpadding='4'>"
+            "<tr><td><b>Ctrl+O</b></td><td>Browse for destination folder</td></tr>"
+            "<tr><td><b>Ctrl+L</b></td><td>Clear the output log</td></tr>"
+            "<tr><td><b>Ctrl+D</b></td><td>Toggle dark mode</td></tr>"
+            "<tr><td><b>Esc</b></td><td>Cancel the running transfer</td></tr>"
+            "<tr><td><b>Ctrl+Q</b></td><td>Quit (prompts if a transfer is in progress)</td></tr>"
+            "<tr><td><b>F1</b></td><td>Show this dialog</td></tr>"
+            "</table>",
+        )
 
     def _populate_recent_destinations(self) -> None:
         """Populate the destination combo box with recent destinations."""

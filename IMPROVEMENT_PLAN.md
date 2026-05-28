@@ -38,7 +38,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 4.2 Defensive settings load
 
 **Phase 5 — UX & Accessibility**
-- [ ] 5.1 [L3] Keyboard shortcuts
+- [x] 5.1 [L3] Keyboard shortcuts
 - [ ] 5.2 [L4] Accessibility names and descriptions
 - [ ] 5.3 [L1] Bound the output log
 - [ ] 5.4 [L2] Tidy `_apply_theme`
@@ -332,13 +332,16 @@ Goal: split the 1000-line `app.py` so future features have somewhere to land.
 Goal: usable by keyboard, by screen readers, by non-English users.
 
 ### 5.1 [L3] Keyboard shortcuts
-- [ ] Add `QShortcut` for `Ctrl+Q` → quit
-- [ ] Add `QShortcut` for `Ctrl+O` → open destination chooser
-- [ ] Add `QShortcut` for `Ctrl+L` → clear log
-- [ ] Add `QShortcut` for `Esc` → cancel running transfer (if any)
-- [ ] Add `QShortcut` for `Ctrl+D` → toggle dark mode
-- [ ] Document shortcuts in README and in a new in-app "Help" dialog
-- [ ] Commit: `feat: keyboard shortcuts for common actions`
+- [x] New `_init_shortcuts()` method wires six `QShortcut` bindings:
+  - [x] `Ctrl+Q` → `self.close()` (triggers existing close-confirm if a transfer is running)
+  - [x] `Ctrl+O` → `_browse_destination`
+  - [x] `Ctrl+L` → `output_text.clear`
+  - [x] `Ctrl+D` → `dark_mode_checkbox.toggle` (which fires `_toggle_dark_mode` via the signal)
+  - [x] `Esc` → `_cancel_operation` (no-op when no transfer running)
+  - [x] `F1` → `_show_help` (new method)
+- [x] `_show_help` displays an HTML-formatted `QMessageBox.information` listing all shortcuts
+- [x] Added a Keyboard Shortcuts section to README under Usage with a `<kbd>`-styled table
+- [x] Commit: `feat: keyboard shortcuts for common actions`
 
 ### 5.2 [L4] Accessibility names and descriptions
 - [ ] For every `QPushButton`, `QComboBox`, `QCheckBox`, `QTextEdit`, `QProgressBar`:
