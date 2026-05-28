@@ -33,3 +33,6 @@ COPY_CHUNK_SIZE = BYTES_PER_MB                    # 1 MB chunks in _chunked_copy
 LARGE_FILE_THRESHOLD = 10 * BYTES_PER_MB          # switch to chunked copy above this
 MAX_FILE_SIZE_WARNING_BYTES = 1000 * BYTES_PER_MB # confirm before transfers near 1 GB
 WORKER_SHUTDOWN_TIMEOUT_MS = 5000                 # how long closeEvent waits for worker
+
+# UI tuning
+MAX_LOG_LINES = 5000  # cap on the activity log; Qt auto-discards oldest blocks

@@ -40,7 +40,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 **Phase 5 — UX & Accessibility**
 - [x] 5.1 [L3] Keyboard shortcuts
 - [x] 5.2 [L4] Accessibility names and descriptions (+ tooltips with shortcut hints)
-- [ ] 5.3 [L1] Bound the output log
+- [x] 5.3 [L1] Bound the output log
 - [ ] 5.4 [L2] Tidy `_apply_theme`
 - [ ] 5.5 [L7] Robust text-drop encoding
 - [ ] 5.6 Add an "About" dialog
@@ -364,10 +364,14 @@ Goal: usable by keyboard, by screen readers, by non-English users.
 - [x] Commit: `feat: add hover tooltips with keyboard shortcut hints`
 
 ### 5.3 [L1] Bound the output log
-- [ ] Add `MAX_LOG_LINES = 5000` constant
-- [ ] After each append, if line count exceeds limit, trim oldest 1000 lines
-- [ ] Add a "Clear log" button
-- [ ] Commit: `feat: bound output log size and add a clear-log button`
+- [x] Added `MAX_LOG_LINES = 5000` constant in `constants.py`
+- [x] Used Qt's native `QTextDocument.setMaximumBlockCount(MAX_LOG_LINES)` rather than implementing manual periodic trimming — simpler, faster, and Qt-tested
+- [x] Clear-log button already exists from earlier UI work; no new button needed
+- [x] 3 tests in `test_log_bound.py`:
+  - [x] `maximumBlockCount` is set on the document after init
+  - [x] Appending past the cap doesn't grow the document
+  - [x] **Most-recent lines are retained** (newest survive, oldest discarded — losing tail would hide recent errors from the user, so this is the assertion that matters)
+- [x] Commit: `feat: bound output log size and add a clear-log button`
 
 ### 5.4 [L2] Tidy `_apply_theme`
 - [ ] Remove the redundant first `setStyleSheet()` call (≈ app.py:796)

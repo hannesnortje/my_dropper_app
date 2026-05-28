@@ -46,6 +46,7 @@ from .constants import (
     DEFAULT_DEST_DIR,
     MAX_COLLISION_ATTEMPTS,
     MAX_FILE_SIZE_WARNING_BYTES,
+    MAX_LOG_LINES,
     MAX_RECENT_DESTINATIONS,
     ORG_NAME,
     SETTINGS_DARK_MODE,
@@ -322,6 +323,10 @@ class FileDropperApp(QWidget):
         )
         self.output_text.setReadOnly(True)
         self.output_text.setMinimumHeight(150)
+        # Cap the log at MAX_LOG_LINES blocks — Qt automatically discards
+        # the oldest blocks when the limit is reached, so a bulk operation
+        # of 50 000+ items can't grow the QTextDocument unbounded.
+        self.output_text.document().setMaximumBlockCount(MAX_LOG_LINES)
         self.output_text.setAccessibleName("Activity log")
         self.output_text.setAccessibleDescription(
             "Read-only log of drop events, file operations, warnings, and errors"
