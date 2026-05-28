@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from my_dropper_app.app import prune_stale_destinations
+from my_dropper_app.parsing import prune_stale_destinations
 
 
 def test_empty_list_returns_empty() -> None:

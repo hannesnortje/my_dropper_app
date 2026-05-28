@@ -20,67 +20,50 @@ This application uses PyQt6, which is licensed under the GPL.
 """
 from __future__ import annotations
 
-import sys
-import os
-import shutil
-import json
 import logging
-import subprocess
+import os
 import platform
-import threading
+import subprocess
+import sys
 from pathlib import Path
-from typing import Optional, List
-from dataclasses import dataclass, field
-from enum import Enum, auto
+from typing import List, Optional
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit,
     QPushButton, QMessageBox, QFileDialog, QProgressBar,
     QCheckBox, QFrame, QSizePolicy, QComboBox,
 )
-from PyQt6.QtCore import (
-    Qt, QEvent, pyqtSignal, QThread, QSettings,
+from PyQt6.QtCore import Qt, QEvent, QSettings
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QFont
+
+from my_dropper_app import __version__
+
+from .constants import (
+    APP_NAME,
+    BYTES_PER_GB,
+    BYTES_PER_KB,
+    BYTES_PER_MB,
+    DEFAULT_DEST_DIR,
+    MAX_COLLISION_ATTEMPTS,
+    MAX_FILE_SIZE_WARNING_BYTES,
+    MAX_RECENT_DESTINATIONS,
+    ORG_NAME,
+    SETTINGS_DARK_MODE,
+    SETTINGS_DEST_DIR,
+    SETTINGS_OPERATION_MODE,
+    SETTINGS_RECENT_DESTINATIONS,
+    SETTINGS_WINDOW_GEOMETRY,
+    WORKER_SHUTDOWN_TIMEOUT_MS,
 )
-from PyQt6.QtGui import (
-    QDragEnterEvent, QDropEvent, QFont,
+from .models import FileOperation, OperationMode, OperationResult
+from .parsing import (
+    parse_text_for_filename,
+    prune_stale_destinations,
+    validate_destination,
 )
+from .theme import DARK_STYLE, LIGHT_STYLE
+from .worker import FileOperationWorker
 
-# =============================================================================
-# Constants & Configuration
-# =============================================================================
-
-try:
-    from my_dropper_app import __version__
-except ImportError:
-    __version__ = "2.0.0"  # Fallback for direct script execution
-
-APP_NAME = "File Dropper & Saver"
-ORG_NAME = "CeruleanCircle"
-
-# Settings keys
-SETTINGS_DEST_DIR = "destination_directory"
-SETTINGS_WINDOW_GEOMETRY = "window_geometry"
-SETTINGS_DARK_MODE = "dark_mode"
-SETTINGS_OPERATION_MODE = "operation_mode"
-SETTINGS_RECENT_DESTINATIONS = "recent_destinations"
-
-# Default values
-DEFAULT_DEST_DIR = Path.home() / "DroppedFiles_QT6"
-MAX_RECENT_DESTINATIONS = 5
-MAX_COLLISION_ATTEMPTS = 10_000  # Cap on " (N)" / "_NNN" filename rename attempts
-
-# Byte-size constants
-BYTES_PER_KB = 1024
-BYTES_PER_MB = 1024 * BYTES_PER_KB
-BYTES_PER_GB = 1024 * BYTES_PER_MB
-
-# Operation-tuning constants
-COPY_CHUNK_SIZE = BYTES_PER_MB                    # 1 MB chunks in _chunked_copy
-LARGE_FILE_THRESHOLD = 10 * BYTES_PER_MB          # switch to chunked copy above this
-MAX_FILE_SIZE_WARNING_BYTES = 1000 * BYTES_PER_MB # confirm before transfers near 1 GB
-WORKER_SHUTDOWN_TIMEOUT_MS = 5000                 # how long closeEvent waits for worker to finish
-
-# Logging setup
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -88,689 +71,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# =============================================================================
-# Pure helpers (no Qt / no self) — easy to unit-test
-# =============================================================================
-
-def validate_destination(path: Path) -> Optional[str]:
-    """Return None if path is a usable destination, else a short reason.
-
-    A "usable" destination must exist, be a directory, and be writable by
-    the current process. The reason string is suitable for showing to a
-    user in the log; do not parse it programmatically.
-    """
-    if not path.exists():
-        return "does not exist"
-    if not path.is_dir():
-        return "not a directory"
-    if not os.access(path, os.W_OK):
-        return "no write permission"
-    return None
-
-
-def prune_stale_destinations(paths: List[str]) -> List[str]:
-    """Return only paths that currently point at real directories.
-
-    Order is preserved. Used at startup to drop entries from the
-    recent-destinations list that no longer exist on disk, and on the
-    fly when the user picks one that has since gone away.
-    """
-    return [p for p in paths if Path(p).is_dir()]
-
-
-# =============================================================================
-# Enums & Data Classes
-# =============================================================================
-
-class OperationMode(Enum):
-    COPY = auto()
-    MOVE = auto()
-
-
-class OperationStatus(Enum):
-    PENDING = auto()
-    IN_PROGRESS = auto()
-    COMPLETED = auto()
-    FAILED = auto()
-    CANCELLED = auto()
-
-
-@dataclass
-class FileOperation:
-    """Represents a single file operation."""
-    source: Path
-    destination: Path
-    mode: OperationMode
-    status: OperationStatus = OperationStatus.PENDING
-    error: Optional[str] = None
-    bytes_copied: int = 0
-    total_bytes: int = 0
-
-
-@dataclass
-class OperationResult:
-    """Result of a batch file operation."""
-    success_count: int = 0
-    fail_count: int = 0
-    skipped_count: int = 0
-    total_bytes: int = 0
-    errors: List[str] = field(default_factory=list)
-
-
-# =============================================================================
-# Styles
-# =============================================================================
-
-LIGHT_STYLE = """
-QWidget {
-    font-family: 'Segoe UI', 'SF Pro Display', 'Ubuntu', sans-serif;
-    font-size: 13px;
-}
-
-QMainWindow, QWidget#mainWidget {
-    background-color: #fafafa;
-}
-
-QLabel#dropLabel {
-    border: 3px dashed #b0b0b0;
-    border-radius: 12px;
-    background-color: #f5f5f5;
-    padding: 30px;
-    font-size: 16px;
-    font-weight: 500;
-    color: #555;
-}
-
-QLabel#dropLabel:hover {
-    border-color: #888;
-    background-color: #efefef;
-}
-
-QLabel#dropLabelActive {
-    border: 3px dashed #2e7d32;
-    border-radius: 12px;
-    background-color: #e8f5e9;
-    padding: 30px;
-    font-size: 16px;
-    font-weight: 500;
-    color: #2e7d32;
-}
-
-QPushButton {
-    background-color: #1976d2;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 8px 16px;
-    font-weight: 500;
-}
-
-QPushButton:hover {
-    background-color: #1565c0;
-}
-
-QPushButton:pressed {
-    background-color: #0d47a1;
-}
-
-QPushButton:disabled {
-    background-color: #bdbdbd;
-    color: #757575;
-}
-
-QPushButton#dangerButton {
-    background-color: #d32f2f;
-}
-
-QPushButton#dangerButton:hover {
-    background-color: #c62828;
-}
-
-QPushButton#secondaryButton {
-    background-color: #f5f5f5;
-    color: #333;
-    border: 1px solid #ddd;
-}
-
-QPushButton#secondaryButton:hover {
-    background-color: #eeeeee;
-}
-
-QLineEdit {
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    padding: 8px 12px;
-    background-color: white;
-}
-
-QLineEdit:focus {
-    border-color: #1976d2;
-}
-
-QTextEdit {
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    background-color: white;
-    padding: 8px;
-}
-
-QProgressBar {
-    border: none;
-    border-radius: 4px;
-    background-color: #e0e0e0;
-    text-align: center;
-    height: 20px;
-}
-
-QProgressBar::chunk {
-    background-color: #4caf50;
-    border-radius: 4px;
-}
-
-QComboBox {
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    padding: 8px 12px;
-    background-color: white;
-    min-width: 100px;
-}
-
-QComboBox:focus {
-    border-color: #1976d2;
-}
-
-QComboBox::drop-down {
-    border: none;
-    width: 30px;
-}
-
-QCheckBox {
-    spacing: 8px;
-}
-
-QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-    border: 2px solid #bdbdbd;
-}
-
-QCheckBox::indicator:checked {
-    background-color: #1976d2;
-    border-color: #1976d2;
-}
-
-QFrame#separator {
-    background-color: #e0e0e0;
-}
-"""
-
-DARK_STYLE = """
-QWidget {
-    font-family: 'Segoe UI', 'SF Pro Display', 'Ubuntu', sans-serif;
-    font-size: 13px;
-    color: #e0e0e0;
-}
-
-QMainWindow, QWidget#mainWidget {
-    background-color: #1e1e1e;
-}
-
-QLabel#dropLabel {
-    border: 3px dashed #555;
-    border-radius: 12px;
-    background-color: #2d2d2d;
-    padding: 30px;
-    font-size: 16px;
-    font-weight: 500;
-    color: #aaa;
-}
-
-QLabel#dropLabel:hover {
-    border-color: #777;
-    background-color: #333;
-}
-
-QLabel#dropLabelActive {
-    border: 3px dashed #66bb6a;
-    border-radius: 12px;
-    background-color: #1b3d1f;
-    padding: 30px;
-    font-size: 16px;
-    font-weight: 500;
-    color: #81c784;
-}
-
-QPushButton {
-    background-color: #0d7377;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 8px 16px;
-    font-weight: 500;
-}
-
-QPushButton:hover {
-    background-color: #14a3a8;
-}
-
-QPushButton:pressed {
-    background-color: #0a5c5f;
-}
-
-QPushButton:disabled {
-    background-color: #404040;
-    color: #666;
-}
-
-QPushButton#dangerButton {
-    background-color: #c62828;
-}
-
-QPushButton#dangerButton:hover {
-    background-color: #e53935;
-}
-
-QPushButton#secondaryButton {
-    background-color: #333;
-    color: #e0e0e0;
-    border: 1px solid #444;
-}
-
-QPushButton#secondaryButton:hover {
-    background-color: #404040;
-}
-
-QLineEdit {
-    border: 1px solid #444;
-    border-radius: 6px;
-    padding: 8px 12px;
-    background-color: #2d2d2d;
-    color: #e0e0e0;
-}
-
-QLineEdit:focus {
-    border-color: #0d7377;
-}
-
-QTextEdit {
-    border: 1px solid #444;
-    border-radius: 8px;
-    background-color: #2d2d2d;
-    color: #e0e0e0;
-    padding: 8px;
-}
-
-QProgressBar {
-    border: none;
-    border-radius: 4px;
-    background-color: #333;
-    text-align: center;
-    height: 20px;
-    color: white;
-}
-
-QProgressBar::chunk {
-    background-color: #0d7377;
-    border-radius: 4px;
-}
-
-QComboBox {
-    border: 1px solid #444;
-    border-radius: 6px;
-    padding: 8px 12px;
-    background-color: #2d2d2d;
-    color: #e0e0e0;
-    min-width: 100px;
-}
-
-QComboBox:focus {
-    border-color: #0d7377;
-}
-
-QComboBox::drop-down {
-    border: none;
-    width: 30px;
-}
-
-QComboBox QAbstractItemView {
-    background-color: #2d2d2d;
-    color: #e0e0e0;
-    selection-background-color: #0d7377;
-}
-
-QCheckBox {
-    spacing: 8px;
-    color: #e0e0e0;
-}
-
-QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-    border: 2px solid #555;
-    background-color: #2d2d2d;
-}
-
-QCheckBox::indicator:checked {
-    background-color: #0d7377;
-    border-color: #0d7377;
-}
-
-QFrame#separator {
-    background-color: #444;
-}
-
-QMessageBox {
-    background-color: #2d2d2d;
-}
-
-QMessageBox QLabel {
-    color: #e0e0e0;
-}
-"""
-
-
-# =============================================================================
-# Worker Thread for File Operations
-# =============================================================================
-
-class FileOperationWorker(QThread):
-    """Worker thread for performing file operations without blocking UI."""
-    
-    progress_updated = pyqtSignal(int, int, str)  # current, total, message
-    operation_completed = pyqtSignal(OperationResult)
-    log_message = pyqtSignal(str)
-    
-    def __init__(
-        self,
-        operations: List[FileOperation],
-        mode: OperationMode,
-        parent: Optional[QThread] = None
-    ):
-        super().__init__(parent)
-        self.operations = operations
-        self.mode = mode
-        # threading.Event gives an explicit cross-thread happens-before
-        # relationship rather than relying on CPython-specific atomicity
-        # of a bare bool.
-        self._cancelled = threading.Event()
-
-    def cancel(self) -> None:
-        """Request cancellation of the operation."""
-        self._cancelled.set()
-        logger.info("File operation cancellation requested")
-
-    def is_cancelled(self) -> bool:
-        """Return True if cancellation has been requested."""
-        return self._cancelled.is_set()
-    
-    def run(self) -> None:
-        """Execute file operations in background."""
-        result = OperationResult()
-        total_ops = len(self.operations)
-        
-        for i, op in enumerate(self.operations):
-            if self._cancelled.is_set():
-                self.log_message.emit("⚠️ Operation cancelled by user")
-                result.skipped_count = total_ops - i
-                break
-            
-            self.progress_updated.emit(i, total_ops, f"Processing: {op.source.name}")
-            
-            try:
-                # is_symlink() must come first — is_file() and is_dir()
-                # silently follow symlinks, which would copy the target
-                # (potentially recursing into a loop) without the user
-                # ever knowing they dropped a symlink.
-                if op.source.is_symlink():
-                    self.log_message.emit(
-                        f"⏭ Skipped symlink (not followed): {op.source.name}"
-                    )
-                    result.skipped_count += 1
-                elif op.source.is_file():
-                    self._process_file(op, result)
-                elif op.source.is_dir():
-                    self._process_directory(op, result)
-                else:
-                    self.log_message.emit(f"⚠️ Skipping unsupported item: {op.source.name}")
-                    result.skipped_count += 1
-                    
-            except PermissionError as e:
-                error_msg = f"❌ Permission denied: {op.source.name}"
-                self.log_message.emit(error_msg)
-                result.fail_count += 1
-                result.errors.append(str(e))
-            except FileNotFoundError as e:
-                error_msg = f"❌ File not found: {op.source.name}"
-                self.log_message.emit(error_msg)
-                result.fail_count += 1
-                result.errors.append(str(e))
-            except shutil.Error as e:
-                error_msg = f"❌ File operation error: {op.source.name} - {e}"
-                self.log_message.emit(error_msg)
-                result.fail_count += 1
-                result.errors.append(str(e))
-            except RuntimeError as e:
-                # Raised by _get_unique_destination when MAX_COLLISION_ATTEMPTS
-                # is exhausted; surface a clear, non-"unexpected" message.
-                error_msg = f"❌ {op.source.name}: {e}"
-                self.log_message.emit(error_msg)
-                result.fail_count += 1
-                result.errors.append(str(e))
-            except Exception as e:
-                error_msg = f"❌ Unexpected error for {op.source.name}: {e}"
-                self.log_message.emit(error_msg)
-                result.fail_count += 1
-                result.errors.append(str(e))
-                logger.exception(f"Unexpected error processing {op.source}")
-        
-        self.progress_updated.emit(total_ops, total_ops, "Complete")
-        self.operation_completed.emit(result)
-    
-    def _process_file(self, op: FileOperation, result: OperationResult) -> None:
-        """Process a single file operation."""
-        dest_path = self._get_unique_destination(op.destination)
-        file_size = op.source.stat().st_size
-        
-        if self.mode == OperationMode.COPY:
-            # Use chunked copy for progress on large files
-            if file_size > LARGE_FILE_THRESHOLD:
-                self._chunked_copy(op.source, dest_path, file_size)
-            else:
-                shutil.copy2(op.source, dest_path)
-            action = "Copied"
-        else:
-            self._safe_move(op.source, dest_path)
-            action = "Moved"
-
-        if dest_path.name != op.source.name:
-            self.log_message.emit(f"✓ {action} (renamed): {op.source.name} → {dest_path.name}")
-        else:
-            self.log_message.emit(f"✓ {action}: {op.source.name}")
-
-        result.success_count += 1
-        result.total_bytes += file_size
-    
-    def _process_directory(self, op: FileOperation, result: OperationResult) -> None:
-        """Process a directory operation (recursive copy/move)."""
-        dest_path = self._get_unique_destination(op.destination)
-
-        # Count items BEFORE the operation — after a successful move the
-        # source no longer exists, so counting afterwards silently yields 0.
-        item_count = sum(1 for _ in op.source.rglob('*'))
-
-        if self.mode == OperationMode.COPY:
-            # symlinks=True preserves nested symlinks as symlinks rather than
-            # following them, which prevents infinite recursion on circular
-            # links and avoids silently bloating the destination.
-            shutil.copytree(op.source, dest_path, symlinks=True)
-            action = "Copied"
-        else:
-            self._safe_move(op.source, dest_path)
-            action = "Moved"
-        
-        if dest_path.name != op.source.name:
-            self.log_message.emit(
-                f"✓ {action} directory (renamed): {op.source.name} → {dest_path.name} "
-                f"({item_count} items)"
-            )
-        else:
-            self.log_message.emit(f"✓ {action} directory: {op.source.name} ({item_count} items)")
-        
-        result.success_count += 1
-    
-    def _chunked_copy(self, source: Path, dest: Path, total_size: int) -> None:
-        """Copy file in chunks for better progress reporting."""
-        chunk_size = COPY_CHUNK_SIZE
-        copied = 0
-        
-        with open(source, 'rb') as src, open(dest, 'wb') as dst:
-            while True:
-                if self._cancelled.is_set():
-                    # Clean up partial file
-                    dst.close()
-                    dest.unlink(missing_ok=True)
-                    raise InterruptedError("Operation cancelled")
-                
-                chunk = src.read(chunk_size)
-                if not chunk:
-                    break
-                dst.write(chunk)
-                copied += len(chunk)
-        
-        # Copy metadata
-        shutil.copystat(source, dest)
-
-    @staticmethod
-    def _is_cross_filesystem(source: Path, dest: Path) -> bool:
-        """Return True if source and the destination's parent live on
-        different filesystems (different st_dev values).
-
-        On the same filesystem `os.rename` is atomic; across filesystems
-        we must fall back to copy-then-delete and we want to know
-        upfront so we can report which phase failed.
-        """
-        try:
-            src_dev = source.stat().st_dev
-            # The destination itself may not exist yet; its parent must.
-            dst_dev = dest.parent.stat().st_dev
-        except OSError:
-            # If we can't even stat, defer to the cross-FS path which has
-            # richer error handling than os.rename.
-            return True
-        return src_dev != dst_dev
-
-    def _move_cross_filesystem(self, source: Path, dest: Path) -> None:
-        """Move across filesystems with explicit copy → verify → delete.
-
-        Each phase raises a phase-labelled RuntimeError on failure so the
-        log line tells the user whether the source is preserved, the
-        destination is corrupt, or the file now exists in BOTH locations.
-        """
-        # Phase 1: copy (preserve nested symlinks rather than following them)
-        try:
-            if source.is_dir():
-                shutil.copytree(source, dest, symlinks=True)
-            else:
-                shutil.copy2(source, dest)
-        except Exception as e:
-            # Clean up partial destination so we don't leave junk behind
-            if dest.exists():
-                if dest.is_dir():
-                    shutil.rmtree(dest, ignore_errors=True)
-                else:
-                    dest.unlink(missing_ok=True)
-            raise RuntimeError(
-                f"cross-filesystem copy failed (source preserved): {e}"
-            ) from e
-
-        # Phase 2: verify
-        if not dest.exists():
-            raise RuntimeError(
-                "cross-filesystem copy reported success but destination is missing"
-            )
-        if source.is_file():
-            src_size = source.stat().st_size
-            dst_size = dest.stat().st_size
-            if src_size != dst_size:
-                # Corrupt copy — drop the destination so the source remains canonical
-                dest.unlink(missing_ok=True)
-                raise RuntimeError(
-                    f"cross-filesystem copy size mismatch "
-                    f"(src={src_size}, dst={dst_size}); destination removed"
-                )
-
-        # Phase 3: delete source
-        try:
-            if source.is_dir():
-                shutil.rmtree(source)
-            else:
-                source.unlink()
-        except Exception as e:
-            raise RuntimeError(
-                f"cross-filesystem copy succeeded but source delete failed — "
-                f"file now exists in BOTH locations: {e}"
-            ) from e
-
-    def _safe_move(self, source: Path, dest: Path) -> None:
-        """Move source → dest. Atomic rename on same filesystem; explicit
-        copy-then-delete with phase-labelled errors across filesystems.
-        """
-        if self._is_cross_filesystem(source, dest):
-            self._move_cross_filesystem(source, dest)
-            return
-        # Same FS — let Path.rename give us the atomic os.rename. For
-        # consistency with shutil.move's prior behaviour we cast to str
-        # internally; pathlib uses os.rename either way on POSIX.
-        source.rename(dest)
-
-    def _get_unique_destination(self, dest: Path) -> Path:
-        """Get a unique destination path, renaming if necessary.
-
-        Raises RuntimeError if a free name cannot be found within
-        MAX_COLLISION_ATTEMPTS — protects the worker thread from hanging
-        when a destination has accumulated pathological collisions.
-        """
-        if not dest.exists():
-            return dest
-
-        stem = dest.stem
-        suffix = dest.suffix
-        parent = dest.parent
-
-        for counter in range(1, MAX_COLLISION_ATTEMPTS + 1):
-            candidate = parent / f"{stem} ({counter}){suffix}"
-            if not candidate.exists():
-                return candidate
-
-        raise RuntimeError(
-            f"Too many filename collisions for {dest.name}: "
-            f"gave up after {MAX_COLLISION_ATTEMPTS} attempts"
-        )
-
-
-# =============================================================================
-# Main Application Window
-# =============================================================================
-
 class FileDropperApp(QWidget):
     """Main application window for File Dropper & Saver."""
-    
+
     def __init__(self):
         super().__init__()
-        
+
         self.settings = QSettings(ORG_NAME, APP_NAME)
         self.worker: Optional[FileOperationWorker] = None
         self.is_dark_mode = self.settings.value(SETTINGS_DARK_MODE, False, type=bool)
-        
+
         self._init_settings()
         self._init_ui()
         self._apply_theme()
         self._restore_geometry()
-        
+
         logger.info(f"{APP_NAME} v{__version__} started")
-    
+
     def _init_settings(self) -> None:
         """Initialize application settings."""
         self.destination_directory = Path(
@@ -780,7 +97,7 @@ class FileDropperApp(QWidget):
         mode_value = self.settings.value(SETTINGS_OPERATION_MODE, "copy")
         if mode_value == "move":
             self.operation_mode = OperationMode.MOVE
-        
+
         raw_recents: List[str] = self.settings.value(
             SETTINGS_RECENT_DESTINATIONS, []
         ) or []
@@ -794,52 +111,52 @@ class FileDropperApp(QWidget):
             logger.info(f"Pruned stale recent destinations: {removed}")
 
         logger.info(f"Destination directory: {self.destination_directory}")
-    
+
     def _init_ui(self) -> None:
         """Initialize the user interface."""
         self.setWindowTitle(f"{APP_NAME} (PyQt6)")
         self.setMinimumSize(700, 550)
         self.setObjectName("mainWidget")
         self.setAcceptDrops(True)
-        
+
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(16)
-        
+
         # Header with title and theme toggle
         header_layout = QHBoxLayout()
-        
+
         title_label = QLabel(f"📁 {APP_NAME}")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)
         title_label.setFont(title_font)
         header_layout.addWidget(title_label)
-        
+
         header_layout.addStretch()
-        
+
         self.dark_mode_checkbox = QCheckBox("🌙 Dark Mode")
         self.dark_mode_checkbox.setChecked(self.is_dark_mode)
         self.dark_mode_checkbox.toggled.connect(self._toggle_dark_mode)
         header_layout.addWidget(self.dark_mode_checkbox)
-        
+
         main_layout.addLayout(header_layout)
-        
+
         # Separator
         separator = QFrame()
         separator.setFrameShape(QFrame.Shape.HLine)
         separator.setObjectName("separator")
         separator.setFixedHeight(1)
         main_layout.addWidget(separator)
-        
+
         # Settings section
         settings_layout = QHBoxLayout()
         settings_layout.setSpacing(12)
-        
+
         dest_label = QLabel("Destination:")
         dest_label.setFixedWidth(80)
         settings_layout.addWidget(dest_label)
-        
+
         self.destination_combo = QComboBox()
         self.destination_combo.setEditable(True)
         self.destination_combo.setMinimumWidth(300)
@@ -847,43 +164,43 @@ class FileDropperApp(QWidget):
         self._populate_recent_destinations()
         self.destination_combo.currentTextChanged.connect(self._on_destination_changed)
         settings_layout.addWidget(self.destination_combo, 1)
-        
+
         browse_button = QPushButton("Browse...")
         browse_button.setObjectName("secondaryButton")
         browse_button.setFixedWidth(100)
         browse_button.clicked.connect(self._browse_destination)
         settings_layout.addWidget(browse_button)
-        
+
         self.open_dest_button = QPushButton("📂 Open")
         self.open_dest_button.setObjectName("secondaryButton")
         self.open_dest_button.setFixedWidth(80)
         self.open_dest_button.setToolTip("Open destination folder")
         self.open_dest_button.clicked.connect(self._open_destination)
         settings_layout.addWidget(self.open_dest_button)
-        
+
         main_layout.addLayout(settings_layout)
-        
+
         # Operation mode selection
         mode_layout = QHBoxLayout()
         mode_layout.setSpacing(12)
-        
+
         mode_label = QLabel("Mode:")
         mode_label.setFixedWidth(80)
         mode_layout.addWidget(mode_label)
-        
+
         self.copy_radio = QCheckBox("📋 Copy files")
         self.copy_radio.setChecked(self.operation_mode == OperationMode.COPY)
         self.copy_radio.toggled.connect(self._on_mode_changed)
         mode_layout.addWidget(self.copy_radio)
-        
+
         self.move_radio = QCheckBox("✂️ Move files")
         self.move_radio.setChecked(self.operation_mode == OperationMode.MOVE)
         self.move_radio.toggled.connect(lambda checked: self._on_mode_changed(not checked))
         mode_layout.addWidget(self.move_radio)
-        
+
         mode_layout.addStretch()
         main_layout.addLayout(mode_layout)
-        
+
         # Drop zone
         self.drop_label = QLabel("🎯 Drag & Drop Files or Text Here")
         self.drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -891,33 +208,33 @@ class FileDropperApp(QWidget):
         self.drop_label.setMinimumHeight(120)
         self.drop_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         main_layout.addWidget(self.drop_label)
-        
+
         # Progress section
         self.progress_widget = QWidget()
         progress_layout = QVBoxLayout(self.progress_widget)
         progress_layout.setContentsMargins(0, 0, 0, 0)
         progress_layout.setSpacing(8)
-        
+
         progress_header = QHBoxLayout()
         self.progress_label = QLabel("Ready")
         progress_header.addWidget(self.progress_label)
         progress_header.addStretch()
-        
+
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.setObjectName("dangerButton")
         self.cancel_button.setFixedWidth(80)
         self.cancel_button.clicked.connect(self._cancel_operation)
         self.cancel_button.setVisible(False)
         progress_header.addWidget(self.cancel_button)
-        
+
         progress_layout.addLayout(progress_header)
-        
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         progress_layout.addWidget(self.progress_bar)
-        
+
         main_layout.addWidget(self.progress_widget)
-        
+
         # Output log
         self.output_text = QTextEdit()
         self.output_text.setPlaceholderText(
@@ -930,50 +247,50 @@ class FileDropperApp(QWidget):
         self.output_text.setReadOnly(True)
         self.output_text.setMinimumHeight(150)
         main_layout.addWidget(self.output_text)
-        
+
         # Button row
         button_layout = QHBoxLayout()
         button_layout.setSpacing(12)
-        
+
         clear_button = QPushButton("🗑️ Clear Log")
         clear_button.setObjectName("secondaryButton")
         clear_button.clicked.connect(self.output_text.clear)
         button_layout.addWidget(clear_button)
-        
+
         button_layout.addStretch()
-        
+
         version_label = QLabel(f"v{__version__}")
         version_label.setStyleSheet("color: #888; font-size: 11px;")
         button_layout.addWidget(version_label)
-        
+
         main_layout.addLayout(button_layout)
-    
+
     def _populate_recent_destinations(self) -> None:
         """Populate the destination combo box with recent destinations."""
         self.destination_combo.clear()
         self.destination_combo.addItem(str(self.destination_directory))
-        
+
         for dest in self.recent_destinations:
             if dest != str(self.destination_directory):
                 self.destination_combo.addItem(dest)
-    
+
     def _apply_theme(self) -> None:
         """Apply the current theme (light or dark)."""
         style = DARK_STYLE if self.is_dark_mode else LIGHT_STYLE
         self.setStyleSheet(style)
-        
+
         # Update drop label style name based on state
         if hasattr(self, 'drop_label'):
             self.drop_label.setObjectName("dropLabel")
             self.drop_label.setStyleSheet(self.drop_label.styleSheet())
-    
+
     def _toggle_dark_mode(self, enabled: bool) -> None:
         """Toggle dark mode on/off."""
         self.is_dark_mode = enabled
         self.settings.setValue(SETTINGS_DARK_MODE, enabled)
         self._apply_theme()
         logger.info(f"Dark mode {'enabled' if enabled else 'disabled'}")
-    
+
     def _restore_geometry(self) -> None:
         """Restore window size and position from settings."""
         geometry = self.settings.value(SETTINGS_WINDOW_GEOMETRY)
@@ -988,11 +305,11 @@ class FileDropperApp(QWidget):
                 x = (screen_geo.width() - self.width()) // 2
                 y = (screen_geo.height() - self.height()) // 2
                 self.move(x, y)
-    
+
     def _save_geometry(self) -> None:
         """Save window size and position to settings."""
         self.settings.setValue(SETTINGS_WINDOW_GEOMETRY, self.saveGeometry())
-    
+
     def _browse_destination(self) -> None:
         """Open dialog to select destination directory."""
         new_dir = QFileDialog.getExistingDirectory(
@@ -1002,23 +319,23 @@ class FileDropperApp(QWidget):
         )
         if new_dir:
             self._set_destination(new_dir)
-    
+
     def _set_destination(self, path: str) -> None:
         """Set the destination directory and update UI."""
         self.destination_directory = Path(path)
         self.settings.setValue(SETTINGS_DEST_DIR, path)
-        
+
         # Update recent destinations
         if path in self.recent_destinations:
             self.recent_destinations.remove(path)
         self.recent_destinations.insert(0, path)
         self.recent_destinations = self.recent_destinations[:MAX_RECENT_DESTINATIONS]
         self.settings.setValue(SETTINGS_RECENT_DESTINATIONS, self.recent_destinations)
-        
+
         self._populate_recent_destinations()
         self._log(f"📁 Destination set to: {path}")
         logger.info(f"Destination changed to: {path}")
-    
+
     def _on_destination_changed(self, text: str) -> None:
         """Handle destination combo box change.
 
@@ -1048,7 +365,7 @@ class FileDropperApp(QWidget):
             return
         self.destination_directory = candidate
         self.settings.setValue(SETTINGS_DEST_DIR, text)
-    
+
     def _on_mode_changed(self, copy_checked: bool) -> None:
         """Handle operation mode change."""
         if copy_checked:
@@ -1057,11 +374,11 @@ class FileDropperApp(QWidget):
         else:
             self.operation_mode = OperationMode.MOVE
             self.copy_radio.setChecked(False)
-        
+
         mode_str = "copy" if self.operation_mode == OperationMode.COPY else "move"
         self.settings.setValue(SETTINGS_OPERATION_MODE, mode_str)
         logger.info(f"Operation mode changed to: {mode_str}")
-    
+
     def _ensure_destination_exists(
         self,
         path: Optional[Path] = None,
@@ -1145,29 +462,29 @@ class FileDropperApp(QWidget):
             except OSError as e:
                 self._log(f"❌ Could not open directory: {e}")
                 logger.exception("Failed to open destination on Linux")
-    
+
     def _log(self, message: str) -> None:
         """Add message to the output log."""
         self.output_text.append(message)
-    
+
     def _cancel_operation(self) -> None:
         """Cancel the current file operation."""
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
             self.cancel_button.setEnabled(False)
             self.cancel_button.setText("Cancelling...")
-    
+
     # =========================================================================
     # Drag and Drop Handling
     # =========================================================================
-    
+
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         """Handle drag enter event."""
         if event.mimeData().hasUrls() or event.mimeData().hasText():
             event.acceptProposedAction()
             self.drop_label.setObjectName("dropLabelActive")
             self._apply_theme()
-            
+
             # Show what's being dragged
             if event.mimeData().hasUrls():
                 count = len(event.mimeData().urls())
@@ -1176,14 +493,14 @@ class FileDropperApp(QWidget):
                 self.drop_label.setText("🎯 Drop text here to save")
         else:
             event.ignore()
-    
+
     def dragLeaveEvent(self, event: QEvent) -> None:
         """Handle drag leave event."""
         self.drop_label.setObjectName("dropLabel")
         self.drop_label.setText("🎯 Drag & Drop Files or Text Here")
         self._apply_theme()
         event.accept()
-    
+
     @staticmethod
     def _extract_local_files(mime) -> List[Path]:
         """Return Path objects for any file:// URLs in the mime data.
@@ -1243,7 +560,7 @@ class FileDropperApp(QWidget):
         else:
             self._log("❌ Dropped data format not supported")
         event.ignore()
-    
+
     def _process_dropped_files(self, file_paths: List[Path]) -> None:
         """Process dropped files using worker thread."""
         self._log(f"📋 Received {len(file_paths)} item(s)")
@@ -1251,7 +568,7 @@ class FileDropperApp(QWidget):
         if not self._ensure_destination_exists(show_error_dialog=True):
             return
         self._log(f"📁 Destination: {self.destination_directory}")
-        
+
         # Check for large files
         total_size = sum(
             f.stat().st_size for f in file_paths if f.is_file()
@@ -1268,7 +585,7 @@ class FileDropperApp(QWidget):
             if reply != QMessageBox.StandardButton.Yes:
                 self._log("⚠️ Operation cancelled by user")
                 return
-        
+
         # Create operations list
         operations = []
         for source in file_paths:
@@ -1278,17 +595,17 @@ class FileDropperApp(QWidget):
                 destination=dest,
                 mode=self.operation_mode
             ))
-        
+
         # Start worker thread
         self._start_worker(operations)
-    
+
     def _start_worker(self, operations: List[FileOperation]) -> None:
         """Start the file operation worker thread."""
         self.worker = FileOperationWorker(operations, self.operation_mode)
         self.worker.progress_updated.connect(self._on_progress_updated)
         self.worker.operation_completed.connect(self._on_operation_completed)
         self.worker.log_message.connect(self._log)
-        
+
         # Show progress UI
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
@@ -1297,28 +614,28 @@ class FileDropperApp(QWidget):
         self.cancel_button.setEnabled(True)
         self.cancel_button.setText("Cancel")
         self.progress_label.setText("Starting...")
-        
+
         # Disable drop zone during operation
         self.setAcceptDrops(False)
-        
+
         self.worker.start()
-    
+
     def _on_progress_updated(self, current: int, total: int, message: str) -> None:
         """Handle progress update from worker."""
         self.progress_bar.setValue(current)
         self.progress_bar.setMaximum(total)
         self.progress_label.setText(message)
-    
+
     def _on_operation_completed(self, result: OperationResult) -> None:
         """Handle completion of file operations."""
         # Hide progress UI
         self.progress_bar.setVisible(False)
         self.cancel_button.setVisible(False)
         self.progress_label.setText("Ready")
-        
+
         # Re-enable drop zone
         self.setAcceptDrops(True)
-        
+
         # Log summary
         self._log("─" * 50)
         mode_emoji = "📋" if self.operation_mode == OperationMode.COPY else "✂️"
@@ -1326,7 +643,7 @@ class FileDropperApp(QWidget):
             f"{mode_emoji} Complete: {result.success_count} succeeded, "
             f"{result.fail_count} failed, {result.skipped_count} skipped"
         )
-        
+
         if result.total_bytes > 0:
             if result.total_bytes > BYTES_PER_GB:
                 size_str = f"{result.total_bytes / BYTES_PER_GB:.2f} GB"
@@ -1335,7 +652,7 @@ class FileDropperApp(QWidget):
             else:
                 size_str = f"{result.total_bytes / BYTES_PER_KB:.1f} KB"
             self._log(f"📊 Total size: {size_str}")
-        
+
         # Show completion message
         if result.fail_count == 0 and result.skipped_count == 0:
             QMessageBox.information(
@@ -1351,18 +668,18 @@ class FileDropperApp(QWidget):
                 f"{result.skipped_count} skipped items.\n\n"
                 f"Check the log for details."
             )
-        
+
         self.worker = None
-    
+
     def _process_dropped_text(self, text_data: str) -> None:
         """Process dropped text data."""
         self._log(f"📝 Received text ({len(text_data)} characters)")
 
         if not self._ensure_destination_exists():
             return
-        
-        # Determine filename from content
-        filename_base, extension = self._parse_text_for_filename(text_data)
+
+        # Determine filename from content (pure helper in parsing.py)
+        filename_base, extension = parse_text_for_filename(text_data, log=self._log)
 
         # Generate unique filename (bounded to avoid hanging on pathological
         # destinations — see MAX_COLLISION_ATTEMPTS)
@@ -1404,59 +721,11 @@ class FileDropperApp(QWidget):
         except Exception as e:
             self._log(f"❌ Error saving text: {e}")
             QMessageBox.critical(self, "Error", f"Could not save text:\n{e}")
-    
-    def _parse_text_for_filename(self, text: str) -> tuple[str, str]:
-        """Parse text content to determine appropriate filename."""
-        filename_base = "dropped_text"
-        extension = "txt"
-        
-        try:
-            data = json.loads(text)
-            
-            if isinstance(data, dict):
-                # Check for ior.modelId — must be a non-empty string. An int
-                # or other non-str type means "not what we expected here",
-                # not "fail loudly" — fall through to the generic-JSON path.
-                ior = data.get("ior")
-                if isinstance(ior, dict):
-                    model_id = ior.get("modelId")
-                    if isinstance(model_id, str) and model_id.strip():
-                        filename_base = f"{model_id}.scenario"
-                        extension = "json"
-                        self._log(f"📌 Using modelId: {model_id}")
-                        return filename_base, extension
 
-                # Check for publicData.name — same string-type guard
-                public_data = data.get("publicData")
-                if isinstance(public_data, dict):
-                    name = public_data.get("name")
-                    if isinstance(name, str) and name.strip():
-                        # Sanitize filename
-                        safe_name = "".join(
-                            c for c in name
-                            if c.isalnum() or c in (' ', '-', '_', '.')
-                        ).strip()
-                        if safe_name:
-                            filename_base = safe_name
-                            extension = "ior"
-                            self._log(f"📌 Using name: {safe_name}")
-                            return filename_base, extension
-                
-                # Generic JSON
-                extension = "json"
-                self._log("📌 Saving as generic JSON")
-                
-        except json.JSONDecodeError:
-            self._log("📌 Text is not JSON, saving as plain text")
-        except Exception as e:
-            self._log(f"⚠️ Error parsing text: {e}")
-        
-        return filename_base, extension
-    
     # =========================================================================
     # Window Events
     # =========================================================================
-    
+
     def closeEvent(self, event: QEvent) -> None:
         """Handle window close event."""
         # Cancel any running operation
@@ -1487,12 +756,12 @@ class FileDropperApp(QWidget):
             else:
                 event.ignore()
                 return
-        
+
         # Save settings
         self._save_geometry()
         self.settings.setValue(SETTINGS_DEST_DIR, str(self.destination_directory))
         self.settings.sync()
-        
+
         logger.info("Application closed")
         event.accept()
 
@@ -1507,10 +776,10 @@ def main():
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(ORG_NAME)
     app.setApplicationVersion(__version__)
-    
+
     window = FileDropperApp()
     window.show()
-    
+
     sys.exit(app.exec())
 
 

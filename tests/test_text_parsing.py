@@ -1,19 +1,11 @@
-"""Tests for FileDropperApp._parse_text_for_filename.
-
-These tests bypass full widget construction by calling the method as an
-unbound function with a minimal `self` that only exposes `_log`. The
-parser writes log lines but otherwise reads nothing from `self`.
-"""
+"""Tests for parse_text_for_filename (the pure helper in parsing.py)."""
 from __future__ import annotations
 
-from types import SimpleNamespace
-
-from my_dropper_app.app import FileDropperApp
+from my_dropper_app.parsing import parse_text_for_filename
 
 
 def _parse(text: str) -> tuple[str, str]:
-    fake_self = SimpleNamespace(_log=lambda _msg: None)
-    return FileDropperApp._parse_text_for_filename(fake_self, text)
+    return parse_text_for_filename(text)
 
 
 def test_ior_model_id_produces_scenario_filename() -> None:

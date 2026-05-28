@@ -12,10 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from my_dropper_app.app import (
-    FileOperationWorker,
-    OperationMode,
-)
+from my_dropper_app.models import OperationMode
+from my_dropper_app.worker import FileOperationWorker
 
 
 @pytest.fixture

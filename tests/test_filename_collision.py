@@ -1,16 +1,18 @@
-"""Tests for FileOperationWorker._get_unique_destination."""
+"""Tests for parsing.get_unique_destination."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from my_dropper_app import app as app_module
-from my_dropper_app.app import FileOperationWorker
+from my_dropper_app import parsing
+from my_dropper_app.parsing import get_unique_destination
 
-# The method does not touch `self` — calling it as an unbound method with
-# a None receiver is intentional and keeps these tests pure-logic.
-_unique = FileOperationWorker._get_unique_destination
+
+def _unique(_self, dest: Path) -> Path:
+    """Backwards-compat shim so the existing tests keep the (None, path)
+    call shape they used when this was an unbound method on the worker."""
+    return get_unique_destination(dest)
 
 
 def test_returns_original_when_no_collision(tmp_path: Path) -> None:
@@ -72,7 +74,7 @@ def test_exhausting_max_attempts_raises_runtime_error(
     tmp_path: Path, monkeypatch
 ) -> None:
     # Shrink the cap so we can saturate it cheaply
-    monkeypatch.setattr(app_module, "MAX_COLLISION_ATTEMPTS", 3)
+    monkeypatch.setattr(parsing, "MAX_COLLISION_ATTEMPTS", 3)
 
     # Create the original plus all three collision slots (1), (2), (3)
     (tmp_path / "doc.txt").write_text("0")
@@ -88,7 +90,7 @@ def test_succeeds_at_boundary_of_max_attempts(
     tmp_path: Path, monkeypatch
 ) -> None:
     # With cap=3 and only (1) and (2) taken, (3) must succeed
-    monkeypatch.setattr(app_module, "MAX_COLLISION_ATTEMPTS", 3)
+    monkeypatch.setattr(parsing, "MAX_COLLISION_ATTEMPTS", 3)
 
     (tmp_path / "doc.txt").write_text("0")
     (tmp_path / "doc (1).txt").write_text("1")

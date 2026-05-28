@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from my_dropper_app.app import validate_destination
+from my_dropper_app.parsing import validate_destination
 
 
 def test_existing_writable_directory_is_valid(tmp_path: Path) -> None:

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QSettings
 
-from my_dropper_app.app import (
+from my_dropper_app.constants import (
     APP_NAME,
     DEFAULT_DEST_DIR,
     ORG_NAME,

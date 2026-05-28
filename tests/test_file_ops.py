@@ -11,13 +11,13 @@ from pathlib import Path
 
 import pytest
 
-from my_dropper_app.app import (
+from my_dropper_app.models import (
     FileOperation,
-    FileOperationWorker,
     OperationMode,
     OperationResult,
     OperationStatus,
 )
+from my_dropper_app.worker import FileOperationWorker
 
 
 @pytest.fixture

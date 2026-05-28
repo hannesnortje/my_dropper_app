@@ -34,7 +34,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 3.7 [M7] Per-platform "open folder" error messages
 
 **Phase 4 — Architecture Cleanup**
-- [ ] 4.1 Split `app.py` into focused modules
+- [x] 4.1 Split `app.py` into focused modules
 - [ ] 4.2 Defensive settings load
 
 **Phase 5 — UX & Accessibility**
@@ -295,16 +295,16 @@ Goal: make the codebase easy to keep working on.
 Goal: split the 1000-line `app.py` so future features have somewhere to land.
 
 ### 4.1 Split `app.py` into focused modules
-- [ ] Create `src/my_dropper_app/constants.py` — all module-level constants and settings keys
-- [ ] Create `src/my_dropper_app/models.py` — `OperationMode`, `OperationStatus`, `FileOperation`, `OperationResult`
-- [ ] Create `src/my_dropper_app/worker.py` — `FileOperationWorker` class
-- [ ] Create `src/my_dropper_app/parsing.py` — `_parse_text_for_filename`, `_get_unique_destination`, anything pure
-- [ ] Create `src/my_dropper_app/theme.py` — light/dark stylesheets
-- [ ] Keep `src/my_dropper_app/app.py` for the `FileDropperApp` widget + `main()`
-- [ ] Update imports
-- [ ] Run all tests — still green
-- [ ] Manual smoke: launch app, drop a file, toggle theme, cancel a transfer
-- [ ] Commit: `refactor: split monolithic app.py into focused modules`
+- [x] Created `src/my_dropper_app/constants.py` — APP_NAME, ORG_NAME, settings keys, defaults, byte sizes, timeouts (35 LOC)
+- [x] Created `src/my_dropper_app/models.py` — `OperationMode`, `OperationStatus`, `FileOperation`, `OperationResult` (no Qt dep) (47 LOC)
+- [x] Created `src/my_dropper_app/theme.py` — `LIGHT_STYLE`, `DARK_STYLE` (315 LOC of CSS)
+- [x] Created `src/my_dropper_app/parsing.py` — pure helpers: `validate_destination`, `prune_stale_destinations`, `get_unique_destination`, `parse_text_for_filename` (123 LOC; latter two converted from method to free function)
+- [x] Created `src/my_dropper_app/worker.py` — `FileOperationWorker` + `_safe_move` / `_move_cross_filesystem` helpers (265 LOC)
+- [x] Slimmed `src/my_dropper_app/app.py` from 1518 → 787 LOC; now contains only `FileDropperApp` + `main()`
+- [x] Updated imports across all test files (11 test files touched, `_unique` shim kept in collision tests for the (None, path) call shape)
+- [x] All 77 tests pass; ruff `F401` clean
+- [ ] Manual smoke: launch app, drop a file, toggle theme, cancel a transfer — *defer to user testing*
+- [x] Commit: `refactor: split monolithic app.py into focused modules`
 
 ### 4.2 [S1] Defensive settings load
 - [ ] Wrap the body of `_load_settings` in try/except
