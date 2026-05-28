@@ -66,6 +66,48 @@ def get_unique_destination(dest: Path) -> Path:
     )
 
 
+def save_text_utf8_with_fallback(
+    path: Path,
+    text: str,
+    log: Optional[Callable[[str], None]] = None,
+) -> bool:
+    """Write text to path as UTF-8, falling back to errors='replace'.
+
+    If the text contains characters that can't be encoded as UTF-8 —
+    most commonly unpaired surrogates from a mangled clipboard payload —
+    we retry the write with `errors='replace'` so the file lands with
+    U+FFFD placeholders rather than the save failing outright. The
+    user keeps their text; the warning in the log explains what was
+    swapped out.
+
+    Returns True on success (whether or not replacements occurred);
+    False if the filesystem refused the write (permission, disk full,
+    etc.). The log callback (if provided) receives one warning when
+    replacements happened or one error when the write failed.
+    """
+    if log is None:
+        def log(_msg: str) -> None:
+            return
+
+    try:
+        path.write_text(text, encoding='utf-8')
+        return True
+    except UnicodeEncodeError as e:
+        log(
+            f"⚠️ Text contains non-UTF-8 character(s) around position "
+            f"{e.start}; saving with replacement characters"
+        )
+        try:
+            path.write_text(text, encoding='utf-8', errors='replace')
+            return True
+        except OSError as inner:
+            log(f"❌ Error saving text: {inner}")
+            return False
+    except OSError as e:
+        log(f"❌ Error saving text: {e}")
+        return False
+
+
 def parse_text_for_filename(
     text: str,
     log: Optional[Callable[[str], None]] = None,

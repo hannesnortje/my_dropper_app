@@ -60,6 +60,7 @@ from .models import FileOperation, OperationMode, OperationResult
 from .parsing import (
     parse_text_for_filename,
     prune_stale_destinations,
+    save_text_utf8_with_fallback,
     validate_destination,
 )
 from .theme import DARK_STYLE, LIGHT_STYLE
@@ -836,18 +837,21 @@ class FileDropperApp(QWidget):
             )
             return
 
-        # Save file
-        try:
-            file_path.write_text(text_data, encoding='utf-8')
+        # Save file. The helper handles the UTF-8 strict → replace fallback
+        # and logs both the warning and any save-error itself, so we only
+        # need to decide which dialog to surface based on the bool result.
+        if save_text_utf8_with_fallback(file_path, text_data, log=self._log):
             self._log(f"✓ Saved: {filename}")
             QMessageBox.information(
                 self,
                 "Text Saved",
                 f"Successfully saved dropped text to:\n{filename}"
             )
-        except Exception as e:
-            self._log(f"❌ Error saving text: {e}")
-            QMessageBox.critical(self, "Error", f"Could not save text:\n{e}")
+        else:
+            QMessageBox.critical(
+                self, "Error",
+                "Could not save text — see the activity log for details."
+            )
 
     # =========================================================================
     # Window Events

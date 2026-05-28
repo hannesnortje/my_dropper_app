@@ -42,7 +42,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 5.2 [L4] Accessibility names and descriptions (+ tooltips with shortcut hints)
 - [x] 5.3 [L1] Bound the output log
 - [x] 5.4 [L2] Tidy `_apply_theme`
-- [ ] 5.5 [L7] Robust text-drop encoding
+- [x] 5.5 [L7] Robust text-drop encoding
 - [ ] 5.6 Add an "About" dialog
 - [ ] 5.7 [L5] i18n scaffolding (optional, deferred)
 
@@ -384,8 +384,18 @@ Goal: usable by keyboard, by screen readers, by non-English users.
 - [x] Commit: `refactor: remove redundant stylesheet application in theme switch`
 
 ### 5.5 [L7] Robust text-drop encoding
-- [ ] Try UTF-8 first; on `UnicodeEncodeError`, fall back to UTF-8 with `errors="replace"` and log a warning
-- [ ] Commit: `fix: don't crash on non-UTF-8 text drops`
+- [x] New pure helper `save_text_utf8_with_fallback(path, text, log=None) -> bool` in `parsing.py`:
+  - Strict UTF-8 write first
+  - On `UnicodeEncodeError` (e.g. unpaired surrogate from a mangled clipboard), retries with `errors='replace'` and logs a `⚠️ Text contains non-UTF-8 character(s) around position N` warning
+  - Returns `bool`; non-encoding `OSError` (permission, disk full, missing parent) returns False with an error logged
+- [x] Wired into `_process_dropped_text` — replaces the inline `write_text + try/except Exception` block; now reads as `if save_text_utf8_with_fallback(...): show info dialog else: show critical dialog`
+- [x] 5 tests in `test_save_text.py`:
+  - [x] Plain ASCII → success, no log lines
+  - [x] Valid UTF-8 with emoji + non-Latin → success, no log lines
+  - [x] Unpaired surrogate (`\ud83d` alone) → success with `?` replacement and one warning logged. Test note: Python's str→bytes `errors='replace'` uses ASCII `?` (U+003F), not U+FFFD (which is the *decoding*-side marker).
+  - [x] Unwritable destination → False with error logged
+  - [x] Helper works with default no-op log callback
+- [x] Commit: `fix: don't crash on non-UTF-8 text drops`
 
 ### 5.6 Add an "About" dialog
 - [ ] Menu bar or button → About dialog
