@@ -14,7 +14,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 **Phase 1 — Stop the Bleeding**
 - [x] 1.1 [C1] Eliminate the duplicate app file
 - [x] 1.2 [C2] Stand up a test harness
-- [ ] 1.3 Add a minimal CI workflow
+- [x] 1.3 Add a minimal CI workflow
 
 **Phase 2 — High-Severity Bug Fixes**
 - [ ] 2.1 [H1] Cap the collision-rename loop
@@ -111,14 +111,15 @@ Goal: one source of truth, basic test coverage so future changes don't silently 
 - [x] Commit: `test: add pytest harness with coverage for pure-logic helpers`
 
 ### 1.3 Add a minimal CI workflow
-- [ ] Create `.github/workflows/ci.yml`
-- [ ] Job: install on Ubuntu Python 3.9, 3.11, 3.12
-- [ ] Step: `pip install -e ".[dev]"`
-- [ ] Step: `pytest`
-- [ ] Step: `python -c "import my_dropper_app"` smoke import
-- [ ] (Optional) add `ruff check .` step
-- [ ] Verify the workflow passes on push
-- [ ] Commit: `ci: add GitHub Actions workflow running pytest`
+- [x] Create `.github/workflows/ci.yml`
+- [x] Job: install on Ubuntu Python 3.9, 3.11, 3.12
+- [x] Step: `pip install -e ".[dev]"` (with pip-cache keyed on `pyproject.toml`)
+- [x] Step: `pytest -v` (with `QT_QPA_PLATFORM=offscreen`)
+- [x] Step: `python -c "import my_dropper_app"` smoke import
+- [x] Step: install Qt system libs (`libegl1`, `libgl1`, `libxkbcommon0`, `libdbus-1-3`, `libfontconfig1`, `libxcb-cursor0`) so PyQt6 loads in CI
+- [ ] (Optional) add `ruff check .` step *(deferred — not blocking; can add when we adopt ruff)*
+- [ ] Verify the workflow passes on push *(deferred — requires `git push` to GitHub; do this when ready to publish)*
+- [x] Commit: `ci: add GitHub Actions workflow running pytest`
 
 ---
 
