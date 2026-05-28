@@ -20,7 +20,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 2.1 [H1] Cap the collision-rename loop
 - [x] 2.2 [H2] Make cancellation thread-safe
 - [x] 2.3 [H3] Validate destinations on change
-- [ ] 2.4 [H4] Filter stale recent destinations
+- [x] 2.4 [H4] Filter stale recent destinations
 - [ ] 2.5 [H5] Document/log cross-FS move risk
 - [ ] 2.6 [H6] Decide on a symlink policy
 
@@ -168,11 +168,12 @@ Goal: close the latent bugs identified in the evaluation.
 - [x] Commit: `fix: validate destination path on change instead of silently accepting`
 
 ### 2.4 [H4] Filter stale recent destinations
-- [ ] In `_load_settings`, after loading the list, filter to entries where `Path(p).exists()`
-- [ ] Persist the cleaned list back so it's permanent
-- [ ] On selection from dropdown, re-check existence; if gone, remove and warn
-- [ ] Test manually: add a destination, delete the directory, restart app → entry is gone
-- [ ] Commit: `fix: prune nonexistent paths from recent-destinations on load`
+- [x] Add pure `prune_stale_destinations(paths)` module helper (preserves order, keeps only real directories)
+- [x] In `_init_settings`, prune the loaded list; if anything dropped, persist the cleaned list back and log a note
+- [x] In `_on_destination_changed`, when the selected path fails `validate_destination`, also drop the stale entry from `recent_destinations`, persist, and repopulate the combo (signals blocked to avoid re-entry)
+- [x] 7 tests in `test_recent_destinations.py`: empty, all valid, mixed valid/ghost, file-not-dir, order preservation, all-stale, idempotency
+- [ ] *Defer:* manual UI test — verify next time you launch the app by checking the dropdown after deleting one of the listed directories
+- [x] Commit: `fix: prune nonexistent paths from recent-destinations on load`
 
 ### 2.5 [H5] Document/log cross-FS move risk
 - [ ] In the move branch, detect if source and destination are on different filesystems (`os.stat(...).st_dev`)

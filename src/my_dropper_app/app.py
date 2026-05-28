@@ -99,6 +99,16 @@ def validate_destination(path: Path) -> Optional[str]:
     return None
 
 
+def prune_stale_destinations(paths: List[str]) -> List[str]:
+    """Return only paths that currently point at real directories.
+
+    Order is preserved. Used at startup to drop entries from the
+    recent-destinations list that no longer exist on disk, and on the
+    fly when the user picks one that has since gone away.
+    """
+    return [p for p in paths if Path(p).is_dir()]
+
+
 # =============================================================================
 # Enums & Data Classes
 # =============================================================================
@@ -666,10 +676,18 @@ class FileDropperApp(QWidget):
         if mode_value == "move":
             self.operation_mode = OperationMode.MOVE
         
-        self.recent_destinations: List[str] = self.settings.value(
+        raw_recents: List[str] = self.settings.value(
             SETTINGS_RECENT_DESTINATIONS, []
         ) or []
-        
+        self.recent_destinations = prune_stale_destinations(raw_recents)
+        if len(self.recent_destinations) != len(raw_recents):
+            # Persist the cleaned list so the user doesn't see ghosts next start
+            self.settings.setValue(
+                SETTINGS_RECENT_DESTINATIONS, self.recent_destinations
+            )
+            removed = [p for p in raw_recents if p not in self.recent_destinations]
+            logger.info(f"Pruned stale recent destinations: {removed}")
+
         logger.info(f"Destination directory: {self.destination_directory}")
     
     def _init_ui(self) -> None:
@@ -910,13 +928,18 @@ class FileDropperApp(QWidget):
         error = validate_destination(candidate)
         if error is not None:
             self._log(f"⚠️ Cannot use destination ({error}): {text}")
-            # Revert the combo to the currently-valid destination so the
-            # user can see at a glance which path is actually in effect.
-            current = str(self.destination_directory)
-            if text != current:
-                self.destination_combo.blockSignals(True)
-                self.destination_combo.setCurrentText(current)
-                self.destination_combo.blockSignals(False)
+            # If the stale entry is in recents, drop it so the user doesn't
+            # keep tripping over the same ghost. Repopulate the combo
+            # afterwards (with signals blocked to avoid re-entering here).
+            if text in self.recent_destinations:
+                self.recent_destinations.remove(text)
+                self.settings.setValue(
+                    SETTINGS_RECENT_DESTINATIONS, self.recent_destinations
+                )
+                self._log(f"🧹 Removed from recents: {text}")
+            self.destination_combo.blockSignals(True)
+            self._populate_recent_destinations()
+            self.destination_combo.blockSignals(False)
             return
         self.destination_directory = candidate
         self.settings.setValue(SETTINGS_DEST_DIR, text)
