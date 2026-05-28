@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write  # needed by softprops/action-gh-release to create the release
+
+jobs:
+  release:
+    name: Build, test, and publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so generate_release_notes can work
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Qt system libraries
+        # Same set the CI workflow needs; tests run headless via the offscreen
+        # platform plugin but still load Qt's native libs.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 \
+            libgl1 \
+            libxkbcommon0 \
+            libdbus-1-3 \
+            libfontconfig1 \
+            libxcb-cursor0
+
+      - name: Install package, dev dependencies, and build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install build
+
+      - name: Verify tag matches pyproject version
+        # Fails fast if someone tagged v2.1.0 but forgot to bump
+        # pyproject.toml — the published artifacts would otherwise carry
+        # the old version while the tag advertises the new one.
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          pyver=$(python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          echo "tag=$tag pyproject=$pyver"
+          if [ "$tag" != "$pyver" ]; then
+            echo "::error::tag v$tag does not match pyproject.toml version $pyver"
+            exit 1
+          fi
+
+      - name: Run pytest
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: pytest -v
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Create GitHub Release with artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

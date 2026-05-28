@@ -48,9 +48,9 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 
 **Phase 6 — Distribution & Polish**
 - [x] 6.1 [L6] Remove the `.docx` from the repo
-- [ ] 6.2 Windows installer (optional)
-- [ ] 6.3 macOS bundle (optional)
-- [ ] 6.4 Release automation
+- [ ] 6.2 Windows installer (optional) — *deferred: needs Windows hardware*
+- [ ] 6.3 macOS bundle (optional) — *deferred: needs macOS hardware*
+- [x] 6.4 Release automation
 
 **Phase 7 — Verification & Wrap-Up**
 - [ ] 7.1 All commits merged, CI green
@@ -441,11 +441,18 @@ Goal: easier to install on more platforms, smaller repo.
 - [ ] Commit: `feat: macOS build script`
 
 ### 6.4 Release automation
-- [ ] Add `.github/workflows/release.yml` that triggers on version tag push
-- [ ] Build sdist + wheel via `python -m build`
-- [ ] Upload to GitHub Release artifacts
-- [ ] (Optional) publish to PyPI via trusted publisher
-- [ ] Commit: `ci: automated releases on version tag`
+- [x] Added `.github/workflows/release.yml` triggered on `v*` tag push
+- [x] Single `release` job on `ubuntu-latest`:
+  - Checks out with `fetch-depth: 0` so auto-generated release notes can see full history
+  - Installs Qt system libs (same set as the CI workflow)
+  - Installs the package with `[dev]` extras plus `build`
+  - **Tag/version sanity check** — fails if the tag (e.g. `v2.1.0`) doesn't match `pyproject.toml`'s `[project] version`; prevents shipping artifacts that don't match their tag
+  - Runs `pytest -v` under offscreen Qt — a tagged release that doesn't pass tests fails fast
+  - Builds sdist + wheel via `python -m build`
+  - Creates the GitHub Release via `softprops/action-gh-release@v2` with `dist/*` attached and auto-generated notes
+- [x] `contents: write` permission scoped to the release job only
+- [ ] *Defer:* PyPI publish via Trusted Publisher — separate concern, not needed for GitHub Releases
+- [x] Commit: `ci: automated releases on version tag`
 
 ---
 
