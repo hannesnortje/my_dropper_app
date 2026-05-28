@@ -1062,17 +1062,43 @@ class FileDropperApp(QWidget):
         self.settings.setValue(SETTINGS_OPERATION_MODE, mode_str)
         logger.info(f"Operation mode changed to: {mode_str}")
     
+    def _ensure_destination_exists(
+        self,
+        path: Optional[Path] = None,
+        *,
+        show_error_dialog: bool = False,
+    ) -> bool:
+        """Ensure `path` exists as a directory, creating it if needed.
+
+        Returns True if the directory exists (already or newly created),
+        False if creation failed. On failure logs the error and, if
+        `show_error_dialog` is set, also surfaces a critical message box.
+
+        Defaults to `self.destination_directory` when `path` is None.
+        """
+        if path is None:
+            path = self.destination_directory
+        if path.exists():
+            return True
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            self._log(f"📁 Created directory: {path}")
+            return True
+        except OSError as e:
+            self._log(f"❌ Cannot create destination: {e}")
+            if show_error_dialog:
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    f"Cannot create destination directory:\n{e}",
+                )
+            return False
+
     def _open_destination(self) -> None:
         """Open the destination directory in file manager."""
         path = self.destination_directory
-        
-        if not path.exists():
-            try:
-                path.mkdir(parents=True, exist_ok=True)
-                self._log(f"📁 Created directory: {path}")
-            except Exception as e:
-                self._log(f"❌ Could not create directory: {e}")
-                return
+        if not self._ensure_destination_exists(path):
+            return
         
         system = platform.system()
         try:
@@ -1157,15 +1183,10 @@ class FileDropperApp(QWidget):
     def _process_dropped_files(self, file_paths: List[Path]) -> None:
         """Process dropped files using worker thread."""
         self._log(f"📋 Received {len(file_paths)} item(s)")
-        
-        # Ensure destination exists
-        try:
-            self.destination_directory.mkdir(parents=True, exist_ok=True)
-            self._log(f"📁 Destination: {self.destination_directory}")
-        except OSError as e:
-            self._log(f"❌ Cannot create destination: {e}")
-            QMessageBox.critical(self, "Error", f"Cannot create destination directory:\n{e}")
+
+        if not self._ensure_destination_exists(show_error_dialog=True):
             return
+        self._log(f"📁 Destination: {self.destination_directory}")
         
         # Check for large files
         total_size = sum(
@@ -1272,12 +1293,8 @@ class FileDropperApp(QWidget):
     def _process_dropped_text(self, text_data: str) -> None:
         """Process dropped text data."""
         self._log(f"📝 Received text ({len(text_data)} characters)")
-        
-        # Ensure destination exists
-        try:
-            self.destination_directory.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            self._log(f"❌ Cannot create destination: {e}")
+
+        if not self._ensure_destination_exists():
             return
         
         # Determine filename from content

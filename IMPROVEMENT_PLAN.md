@@ -26,7 +26,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 
 **Phase 3 — Code Hygiene & Maintainability**
 - [x] 3.1 [M1] Extract magic numbers to named constants
-- [ ] 3.2 [M2] Consolidate destination-directory creation
+- [x] 3.2 [M2] Consolidate destination-directory creation
 - [ ] 3.3 [M3] Remove unused imports & constants
 - [ ] 3.4 [M4] Count directory items before move
 - [ ] 3.5 [M5] Tighten JSON filename parsing
@@ -224,11 +224,17 @@ Goal: make the codebase easy to keep working on.
 - [x] Commit: `refactor: replace magic numbers with named constants`
 
 ### 3.2 [M2] Consolidate destination-directory creation
-- [ ] Add `_ensure_destination_exists(self) -> bool` method
-- [ ] Replace the three `mkdir(parents=True, exist_ok=True)` call sites (≈ app.py:876, 967, 1085) with this helper
-- [ ] Helper returns `False` and shows a user-visible error if creation fails
-- [ ] Callers respect the return value
-- [ ] Commit: `refactor: consolidate destination-mkdir logic into single helper`
+- [x] Add `_ensure_destination_exists(path=None, *, show_error_dialog=False) -> bool`
+  - Defaults `path` to `self.destination_directory` for the common case
+  - Logs `📁 Created directory: <path>` only when actually creating (not on no-op exists check)
+  - Logs `❌ Cannot create destination: <err>` on failure; optionally shows a critical dialog
+- [x] Replace the three sites:
+  - [x] `_open_destination` (was: bare-Exception catch, returned silently on failure)
+  - [x] `_process_dropped_files` (was: `OSError` catch + QMessageBox.critical) — now passes `show_error_dialog=True`
+  - [x] `_process_dropped_text` (was: `OSError` catch + log only) — uses the default no-dialog mode
+- [x] Callers respect the bool return; only the dropped-files path keeps the now-unconditional "Destination: X" log line (it's a distinct signal from "Created")
+- [x] 5 tests in `test_ensure_destination.py`: existing path no-ops, missing path is created+logged, explicit path overrides default, mkdir failure returns False+logs, `show_error_dialog=True` fires `QMessageBox.critical`
+- [x] Commit: `refactor: consolidate destination-mkdir logic into single helper`
 
 ### 3.3 [M3] Remove unused imports & constants
 - [ ] Remove unused: `QLineEdit`, `QSize`, `QPoint`, `QStyle`
