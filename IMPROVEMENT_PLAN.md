@@ -35,7 +35,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 
 **Phase 4 — Architecture Cleanup**
 - [x] 4.1 Split `app.py` into focused modules
-- [ ] 4.2 Defensive settings load
+- [x] 4.2 Defensive settings load
 
 **Phase 5 — UX & Accessibility**
 - [ ] 5.1 [L3] Keyboard shortcuts
@@ -307,10 +307,23 @@ Goal: split the 1000-line `app.py` so future features have somewhere to land.
 - [x] Commit: `refactor: split monolithic app.py into focused modules`
 
 ### 4.2 [S1] Defensive settings load
-- [ ] Wrap the body of `_load_settings` in try/except
-- [ ] On any exception: log a warning, reset to defaults, do NOT crash
-- [ ] Add test: corrupt one value type in QSettings → app still starts
-- [ ] Commit: `fix: defensive settings load with reset-to-defaults fallback`
+- [x] Defaults (`DEFAULT_DEST_DIR`, COPY mode, empty recents) assigned **before** the try block so partial-load exceptions still leave the widget usable
+- [x] Wrapped the body of `_init_settings` in try/except; on failure logs `Failed to load settings, falling back to defaults: <err>` with traceback at WARNING level
+- [x] Added defensive type-handling that matches the Qt quirks:
+  - `Path(str(raw_dest))` instead of `Path(raw_dest)` so wrong-type values fail early in the controlled try block
+  - `str(mode_value).lower() == "move"` so non-string mode values fall back to COPY
+  - QSettings returns a bare `str` when a list has only one entry — wrapped back into a list
+  - Non-string elements filtered before `prune_stale_destinations` (defends against hand-edited configs)
+- [x] 8 tests in `test_init_settings.py` using a `FakeSettings` stand-in (avoids real QSettings + QApplication):
+  - [x] Empty settings → defaults
+  - [x] Valid settings round-trip correctly
+  - [x] Existing recent directories are kept
+  - [x] `QSettings.value` raising → defaults, no crash
+  - [x] Single-string recents → wrapped back into list
+  - [x] Mixed-type recents → non-strings filtered
+  - [x] Hostile `__str__` on dest path → falls back to default
+  - [x] Partial failure (DEST_DIR ok, recents raises) → keeps the parts that loaded
+- [x] Commit: `fix: defensive settings load with reset-to-defaults fallback`
 
 ---
 

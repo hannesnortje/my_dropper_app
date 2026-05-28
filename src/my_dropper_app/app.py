@@ -89,26 +89,50 @@ class FileDropperApp(QWidget):
         logger.info(f"{APP_NAME} v{__version__} started")
 
     def _init_settings(self) -> None:
-        """Initialize application settings."""
-        self.destination_directory = Path(
-            self.settings.value(SETTINGS_DEST_DIR, str(DEFAULT_DEST_DIR))
-        )
-        self.operation_mode = OperationMode.COPY
-        mode_value = self.settings.value(SETTINGS_OPERATION_MODE, "copy")
-        if mode_value == "move":
-            self.operation_mode = OperationMode.MOVE
+        """Initialize application settings, falling back to defaults on any error.
 
-        raw_recents: List[str] = self.settings.value(
-            SETTINGS_RECENT_DESTINATIONS, []
-        ) or []
-        self.recent_destinations = prune_stale_destinations(raw_recents)
-        if len(self.recent_destinations) != len(raw_recents):
-            # Persist the cleaned list so the user doesn't see ghosts next start
-            self.settings.setValue(
-                SETTINGS_RECENT_DESTINATIONS, self.recent_destinations
+        A corrupt or hand-edited QSettings file (wrong value types, foreign
+        list shapes, etc.) shouldn't prevent the app from starting. We
+        assign sensible defaults first, then attempt the real load — any
+        exception leaves the defaults in place and logs a warning.
+        """
+        # Defaults assigned BEFORE the try block so a mid-load exception
+        # always leaves the widget in a usable state.
+        self.destination_directory = DEFAULT_DEST_DIR
+        self.operation_mode = OperationMode.COPY
+        self.recent_destinations: List[str] = []
+
+        try:
+            raw_dest = self.settings.value(SETTINGS_DEST_DIR, str(DEFAULT_DEST_DIR))
+            if raw_dest:
+                self.destination_directory = Path(str(raw_dest))
+
+            mode_value = self.settings.value(SETTINGS_OPERATION_MODE, "copy")
+            if str(mode_value).lower() == "move":
+                self.operation_mode = OperationMode.MOVE
+
+            raw_recents = self.settings.value(SETTINGS_RECENT_DESTINATIONS, []) or []
+            # Qt quirk: a single-entry list comes back as a bare str. Normalize.
+            if isinstance(raw_recents, str):
+                raw_recents = [raw_recents]
+            # Drop non-string elements defensively before we hand them to
+            # prune_stale_destinations (which calls Path(p) on each).
+            raw_recents = [r for r in raw_recents if isinstance(r, str)]
+
+            self.recent_destinations = prune_stale_destinations(raw_recents)
+            if len(self.recent_destinations) != len(raw_recents):
+                # Persist the cleaned list so the user doesn't see ghosts next start
+                self.settings.setValue(
+                    SETTINGS_RECENT_DESTINATIONS, self.recent_destinations
+                )
+                removed = [p for p in raw_recents if p not in self.recent_destinations]
+                logger.info(f"Pruned stale recent destinations: {removed}")
+
+        except Exception as e:  # noqa: BLE001 — boundary, by design
+            logger.warning(
+                f"Failed to load settings, falling back to defaults: {e}",
+                exc_info=True,
             )
-            removed = [p for p in raw_recents if p not in self.recent_destinations]
-            logger.info(f"Pruned stale recent destinations: {removed}")
 
         logger.info(f"Destination directory: {self.destination_directory}")
 
