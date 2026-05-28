@@ -80,6 +80,26 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# Pure helpers (no Qt / no self) — easy to unit-test
+# =============================================================================
+
+def validate_destination(path: Path) -> Optional[str]:
+    """Return None if path is a usable destination, else a short reason.
+
+    A "usable" destination must exist, be a directory, and be writable by
+    the current process. The reason string is suitable for showing to a
+    user in the log; do not parse it programmatically.
+    """
+    if not path.exists():
+        return "does not exist"
+    if not path.is_dir():
+        return "not a directory"
+    if not os.access(path, os.W_OK):
+        return "no write permission"
+    return None
+
+
+# =============================================================================
 # Enums & Data Classes
 # =============================================================================
 
@@ -877,10 +897,29 @@ class FileDropperApp(QWidget):
         logger.info(f"Destination changed to: {path}")
     
     def _on_destination_changed(self, text: str) -> None:
-        """Handle destination combo box change."""
-        if text and Path(text).exists():
-            self.destination_directory = Path(text)
-            self.settings.setValue(SETTINGS_DEST_DIR, text)
+        """Handle destination combo box change.
+
+        Validates the selected path and refuses to switch to one that
+        doesn't exist, isn't a directory, or isn't writable. Without this
+        check a stale entry in the recent-destinations dropdown would
+        silently fail at the next drop.
+        """
+        if not text:
+            return
+        candidate = Path(text)
+        error = validate_destination(candidate)
+        if error is not None:
+            self._log(f"⚠️ Cannot use destination ({error}): {text}")
+            # Revert the combo to the currently-valid destination so the
+            # user can see at a glance which path is actually in effect.
+            current = str(self.destination_directory)
+            if text != current:
+                self.destination_combo.blockSignals(True)
+                self.destination_combo.setCurrentText(current)
+                self.destination_combo.blockSignals(False)
+            return
+        self.destination_directory = candidate
+        self.settings.setValue(SETTINGS_DEST_DIR, text)
     
     def _on_mode_changed(self, copy_checked: bool) -> None:
         """Handle operation mode change."""

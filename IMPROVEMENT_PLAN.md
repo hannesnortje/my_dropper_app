@@ -19,7 +19,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 **Phase 2 — High-Severity Bug Fixes**
 - [x] 2.1 [H1] Cap the collision-rename loop
 - [x] 2.2 [H2] Make cancellation thread-safe
-- [ ] 2.3 [H3] Validate destinations on change
+- [x] 2.3 [H3] Validate destinations on change
 - [ ] 2.4 [H4] Filter stale recent destinations
 - [ ] 2.5 [H5] Document/log cross-FS move risk
 - [ ] 2.6 [H6] Decide on a symlink policy
@@ -155,11 +155,17 @@ Goal: close the latent bugs identified in the evaluation.
 - [x] Commit: `fix: use threading.Event for cancellation to avoid GIL-only atomicity`
 
 ### 2.3 [H3] Validate destinations on change
-- [ ] In `_on_destination_changed` (≈ app.py:857), check `Path(text).exists()` and `os.access(path, os.W_OK)`
-- [ ] If invalid: do NOT update `self.destination_directory`; show inline warning (red border or status label)
-- [ ] If valid but missing: prompt user "Create this directory?" before accepting
-- [ ] Test manually: type a nonsense path → warning shown, no silent acceptance
-- [ ] Commit: `fix: validate destination path on change instead of silently accepting`
+- [x] Extract a pure `validate_destination(path)` module function checking `exists`, `is_dir`, `os.access(W_OK)`
+- [x] In `_on_destination_changed`, run the validator; on failure log a warning AND revert the combo box to the current valid destination
+- [x] Use `blockSignals` around the combo revert to avoid re-entering the handler
+- [x] Add tests for `validate_destination`:
+  - [x] Existing writable dir → None
+  - [x] Nonexistent path → `"does not exist"`
+  - [x] File (not directory) → `"not a directory"`
+  - [x] Read-only dir (chmod 555) → `"no write permission"` (skipped on Windows and when running as root)
+- [ ] *Defer:* prompt-to-create flow for missing paths — line edit is read-only so users cannot type missing paths today; revisit if/when free-text entry is added
+- [ ] *Defer:* manual UI test — needs a display; verify when you next launch the app and pick a stale recent destination
+- [x] Commit: `fix: validate destination path on change instead of silently accepting`
 
 ### 2.4 [H4] Filter stale recent destinations
 - [ ] In `_load_settings`, after loading the list, filter to entries where `Path(p).exists()`
