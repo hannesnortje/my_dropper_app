@@ -29,6 +29,7 @@ def test_every_interactive_widget_has_accessibility_metadata(qtbot) -> None:
         ("move_radio",           "move radio",             True),
         ("drop_label",           "drop zone label",        True),
         ("cancel_button",        "cancel button",          True),
+        ("about_button",         "About button",           True),
         ("progress_bar",         "progress bar",           False),
         ("output_text",          "output log",             False),
     ]

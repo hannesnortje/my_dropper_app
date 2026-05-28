@@ -43,7 +43,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 5.3 [L1] Bound the output log
 - [x] 5.4 [L2] Tidy `_apply_theme`
 - [x] 5.5 [L7] Robust text-drop encoding
-- [ ] 5.6 Add an "About" dialog
+- [x] 5.6 Add an "About" dialog
 - [ ] 5.7 [L5] i18n scaffolding (optional, deferred)
 
 **Phase 6 — Distribution & Polish**
@@ -398,9 +398,16 @@ Goal: usable by keyboard, by screen readers, by non-English users.
 - [x] Commit: `fix: don't crash on non-UTF-8 text drops`
 
 ### 5.6 Add an "About" dialog
-- [ ] Menu bar or button → About dialog
-- [ ] Shows: version, author, license, link to repo
-- [ ] Commit: `feat: add About dialog`
+- [x] Added "ℹ️ About" button in the bottom button row (next to Clear Log, before the version label) — chose a button over a menu bar to avoid the menu-bar infrastructure overhead for a single item
+- [x] `_show_about` uses `QMessageBox.about()` for the native About chrome; HTML content displays:
+  - App name + version
+  - One-line description
+  - Author, license, repository link (clickable since QMessageBox renders HTML anchors)
+  - F1 hint pointing to the shortcuts dialog
+- [x] Imports `__author__` and `__license__` from `my_dropper_app` package (already defined in `__init__.py`) — no hard-coded duplication
+- [x] Wired accessibleName, accessibleDescription, and tooltip on the new button
+- [x] Extended `test_accessibility.py` to include `about_button` in the named-widget assertion list
+- [x] Commit: `feat: add About dialog`
 
 ### 5.7 [L5] i18n scaffolding (optional, defer)
 - [ ] Wrap every user-facing string in `self.tr(...)`

@@ -36,7 +36,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QEvent, QSettings
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QFont, QKeySequence, QShortcut
 
-from my_dropper_app import __version__
+from my_dropper_app import __author__, __license__, __version__
 
 from .constants import (
     APP_NAME,
@@ -350,6 +350,16 @@ class FileDropperApp(QWidget):
 
         button_layout.addStretch()
 
+        self.about_button = QPushButton("ℹ️ About")
+        self.about_button.setObjectName("secondaryButton")
+        self.about_button.clicked.connect(self._show_about)
+        self.about_button.setAccessibleName("About this app")
+        self.about_button.setAccessibleDescription(
+            "Open a dialog showing version, author, license, and repository link"
+        )
+        self.about_button.setToolTip("About this app — version, license, source")
+        button_layout.addWidget(self.about_button)
+
         version_label = QLabel(f"v{__version__}")
         version_label.setStyleSheet("color: #888; font-size: 11px;")
         button_layout.addWidget(version_label)
@@ -373,6 +383,25 @@ class FileDropperApp(QWidget):
         ]
         for sequence, slot in bindings:
             QShortcut(QKeySequence(sequence), self, activated=slot)
+
+    def _show_about(self) -> None:
+        """Open the About dialog with version, author, license, and repo link."""
+        repo_url = "https://github.com/hannesnortje/my_dropper_app"
+        QMessageBox.about(
+            self,
+            f"About {APP_NAME}",
+            f"<h3>{APP_NAME}</h3>"
+            f"<p>Version {__version__}</p>"
+            f"<p>A modern drag-and-drop file organizer built with PyQt6.</p>"
+            f"<p>"
+            f"<b>Author:</b> {__author__}<br>"
+            f"<b>License:</b> {__license__}<br>"
+            f'<b>Repository:</b> <a href="{repo_url}">{repo_url}</a>'
+            f"</p>"
+            f"<p style='color:#888; font-size:11px;'>"
+            f"Press <b>F1</b> for keyboard shortcuts."
+            f"</p>",
+        )
 
     def _show_help(self) -> None:
         """Display the keyboard-shortcut reference."""
