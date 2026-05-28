@@ -57,11 +57,36 @@ def test_empty_string_returns_defaults() -> None:
 
 
 def test_ior_present_but_modelid_missing_falls_through_to_generic_json() -> None:
-    # NOTE: this exercises the M5 issue noted in IMPROVEMENT_PLAN — currently
-    # the code handles missing modelId gracefully via .get(), but an
-    # intermediate type mismatch (e.g. ior.modelId is an int) is not yet
-    # type-checked. We assert the current safe behavior.
     base, ext = _parse('{"ior": {"notModelId": "x"}}')
+    assert base == "dropped_text"
+    assert ext == "json"
+
+
+def test_modelid_with_non_string_type_falls_through_to_generic_json() -> None:
+    # int instead of str — previously triggered AttributeError caught by
+    # the generic except Exception (returns defaults but logs a confusing
+    # "Error parsing text" line). Now the isinstance(str) guard makes this
+    # the same clean fall-through as a missing key.
+    base, ext = _parse('{"ior": {"modelId": 123}}')
+    assert base == "dropped_text"
+    assert ext == "json"
+
+
+def test_modelid_with_list_type_falls_through_to_generic_json() -> None:
+    base, ext = _parse('{"ior": {"modelId": ["a", "b"]}}')
+    assert base == "dropped_text"
+    assert ext == "json"
+
+
+def test_publicdata_name_with_non_string_type_falls_through() -> None:
+    base, ext = _parse('{"publicData": {"name": 42}}')
+    assert base == "dropped_text"
+    assert ext == "json"
+
+
+def test_ior_value_is_not_a_dict_falls_through() -> None:
+    # ior present but not a dict (e.g. a bare string)
+    base, ext = _parse('{"ior": "just a string"}')
     assert base == "dropped_text"
     assert ext == "json"
 

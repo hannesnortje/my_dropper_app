@@ -1350,22 +1350,26 @@ class FileDropperApp(QWidget):
             data = json.loads(text)
             
             if isinstance(data, dict):
-                # Check for ior.modelId
-                if "ior" in data and isinstance(data["ior"], dict):
-                    model_id = data["ior"].get("modelId", "")
-                    if model_id and model_id.strip():
+                # Check for ior.modelId — must be a non-empty string. An int
+                # or other non-str type means "not what we expected here",
+                # not "fail loudly" — fall through to the generic-JSON path.
+                ior = data.get("ior")
+                if isinstance(ior, dict):
+                    model_id = ior.get("modelId")
+                    if isinstance(model_id, str) and model_id.strip():
                         filename_base = f"{model_id}.scenario"
                         extension = "json"
                         self._log(f"📌 Using modelId: {model_id}")
                         return filename_base, extension
-                
-                # Check for publicData.name
-                if "publicData" in data and isinstance(data["publicData"], dict):
-                    name = data["publicData"].get("name", "")
-                    if name and name.strip():
+
+                # Check for publicData.name — same string-type guard
+                public_data = data.get("publicData")
+                if isinstance(public_data, dict):
+                    name = public_data.get("name")
+                    if isinstance(name, str) and name.strip():
                         # Sanitize filename
                         safe_name = "".join(
-                            c for c in name 
+                            c for c in name
                             if c.isalnum() or c in (' ', '-', '_', '.')
                         ).strip()
                         if safe_name:

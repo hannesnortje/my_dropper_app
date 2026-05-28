@@ -29,7 +29,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 3.2 [M2] Consolidate destination-directory creation
 - [x] 3.3 [M3] Remove unused imports & constants
 - [x] 3.4 [M4] Count directory items before move
-- [ ] 3.5 [M5] Tighten JSON filename parsing
+- [x] 3.5 [M5] Tighten JSON filename parsing
 - [ ] 3.6 [M6] Make confirm-dialog non-blocking from worker perspective
 - [ ] 3.7 [M7] Per-platform "open folder" error messages
 
@@ -255,11 +255,17 @@ Goal: make the codebase easy to keep working on.
 - [x] Commit: `fix: count directory items before move so source still exists`
 
 ### 3.5 [M5] Tighten JSON filename parsing
-- [ ] In `_parse_text_for_filename`, use `.get()` chains with defaults instead of bare `[...]` lookups
-- [ ] Validate type at each step (`isinstance(v, str)` before using as filename)
-- [ ] Add explicit test: `{"ior": {}}` returns the fallback, doesn't `KeyError`
-- [ ] Add explicit test: `{"ior": {"modelId": 123}}` (wrong type) returns fallback
-- [ ] Commit: `fix: harden JSON filename parsing against partially-shaped objects`
+- [x] Replaced bare `data["ior"]` lookups with `data.get("ior")` for cleaner intent
+- [x] Replaced `if model_id and model_id.strip()` with `if isinstance(model_id, str) and model_id.strip()` (same for `name`)
+- [x] Effect: wrong-type values (int, list, dict, bool) now fall through cleanly to generic-JSON instead of raising `AttributeError` and producing the confusing `⚠️ Error parsing text` log line
+- [x] Removed the M5 NOTE comment from `test_ior_present_but_modelid_missing_falls_through_to_generic_json`
+- [x] Added 4 new tests:
+  - [x] `modelId: 123` (int) → generic JSON fallback
+  - [x] `modelId: ["a", "b"]` (list) → generic JSON fallback
+  - [x] `publicData.name: 42` (int) → generic JSON fallback
+  - [x] `ior: "just a string"` (str not dict) → generic JSON fallback
+- [x] `{"ior": {}}` and `{"publicData": {}}` cases were already passing — the existing `.get()` defaults handled them, but now the type check makes the behaviour deliberate rather than accidental
+- [x] Commit: `fix: harden JSON filename parsing against partially-shaped objects`
 
 ### 3.6 [M6] Make confirm-dialog non-blocking from worker perspective
 - [ ] Audit modal dialog flows during transfer (≈ app.py:981, 1061)
