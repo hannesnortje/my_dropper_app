@@ -137,15 +137,21 @@ def test_move_directory_recursive(tmp_path: Path, worker_move) -> None:
     )
     result = OperationResult()
 
+    # Collect log messages so we can assert the item count survives the move
+    log_messages: list[str] = []
+    worker_move.log_message.connect(log_messages.append)
+
     worker_move._process_directory(op, result)
 
     assert (dest_dir / "moveable_tree" / "a.txt").read_text() == "a"
     assert (dest_dir / "moveable_tree" / "inner" / "b.txt").read_text() == "b"
     assert not src.exists(), "move must remove the source tree"
-    # NOTE: M4 — _process_directory currently counts items after the move,
-    # which silently produces 0 because the source is gone. We assert
-    # success_count rather than item_count to avoid coupling to that bug.
     assert result.success_count == 1
+
+    # rglob('*') sees a.txt, inner, inner/b.txt → 3 entries. Before the M4
+    # fix the count was taken after the move and silently came out as 0.
+    success_line = next(m for m in log_messages if m.startswith("✓ Moved"))
+    assert "(3 items)" in success_line
 
 
 def test_copy_preserves_mtime(tmp_path: Path, worker_copy) -> None:

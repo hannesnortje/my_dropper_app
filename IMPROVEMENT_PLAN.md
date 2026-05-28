@@ -28,7 +28,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 3.1 [M1] Extract magic numbers to named constants
 - [x] 3.2 [M2] Consolidate destination-directory creation
 - [x] 3.3 [M3] Remove unused imports & constants
-- [ ] 3.4 [M4] Count directory items before move
+- [x] 3.4 [M4] Count directory items before move
 - [ ] 3.5 [M5] Tighten JSON filename parsing
 - [ ] 3.6 [M6] Make confirm-dialog non-blocking from worker perspective
 - [ ] 3.7 [M7] Per-platform "open folder" error messages
@@ -249,9 +249,10 @@ Goal: make the codebase easy to keep working on.
 - [x] Commit: `refactor: remove unused imports and dead constants`
 
 ### 3.4 [M4] Count directory items before move
-- [ ] Move the `op.source.rglob('*')` count call BEFORE `shutil.move(...)`
-- [ ] Cache the count and use it post-operation for the success log
-- [ ] Commit: `fix: count directory items before move so source still exists`
+- [x] Move the `op.source.rglob('*')` count call to BEFORE the copytree/_safe_move block
+- [x] Count is cached and used in the post-operation log line — works correctly for both copies and moves now
+- [x] Updated `test_move_directory_recursive` (was previously asserting the bug existed via a NOTE comment): now collects `log_message` emissions and asserts `(3 items)` appears in the success line
+- [x] Commit: `fix: count directory items before move so source still exists`
 
 ### 3.5 [M5] Tighten JSON filename parsing
 - [ ] In `_parse_text_for_filename`, use `.get()` chains with defaults instead of bare `[...]` lookups

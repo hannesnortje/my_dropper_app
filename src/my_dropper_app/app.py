@@ -596,6 +596,10 @@ class FileOperationWorker(QThread):
         """Process a directory operation (recursive copy/move)."""
         dest_path = self._get_unique_destination(op.destination)
 
+        # Count items BEFORE the operation — after a successful move the
+        # source no longer exists, so counting afterwards silently yields 0.
+        item_count = sum(1 for _ in op.source.rglob('*'))
+
         if self.mode == OperationMode.COPY:
             # symlinks=True preserves nested symlinks as symlinks rather than
             # following them, which prevents infinite recursion on circular
@@ -605,9 +609,6 @@ class FileOperationWorker(QThread):
         else:
             self._safe_move(op.source, dest_path)
             action = "Moved"
-        
-        # Count items in directory
-        item_count = sum(1 for _ in op.source.rglob('*'))
         
         if dest_path.name != op.source.name:
             self.log_message.emit(
