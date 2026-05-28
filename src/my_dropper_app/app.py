@@ -27,6 +27,7 @@ import json
 import logging
 import subprocess
 import platform
+import threading
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
@@ -451,12 +452,19 @@ class FileOperationWorker(QThread):
         super().__init__(parent)
         self.operations = operations
         self.mode = mode
-        self._cancelled = False
-    
+        # threading.Event gives an explicit cross-thread happens-before
+        # relationship rather than relying on CPython-specific atomicity
+        # of a bare bool.
+        self._cancelled = threading.Event()
+
     def cancel(self) -> None:
         """Request cancellation of the operation."""
-        self._cancelled = True
+        self._cancelled.set()
         logger.info("File operation cancellation requested")
+
+    def is_cancelled(self) -> bool:
+        """Return True if cancellation has been requested."""
+        return self._cancelled.is_set()
     
     def run(self) -> None:
         """Execute file operations in background."""
@@ -464,7 +472,7 @@ class FileOperationWorker(QThread):
         total_ops = len(self.operations)
         
         for i, op in enumerate(self.operations):
-            if self._cancelled:
+            if self._cancelled.is_set():
                 self.log_message.emit("⚠️ Operation cancelled by user")
                 result.skipped_count = total_ops - i
                 break
@@ -567,7 +575,7 @@ class FileOperationWorker(QThread):
         
         with open(source, 'rb') as src, open(dest, 'wb') as dst:
             while True:
-                if self._cancelled:
+                if self._cancelled.is_set():
                     # Clean up partial file
                     dst.close()
                     dest.unlink(missing_ok=True)

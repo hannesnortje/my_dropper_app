@@ -18,7 +18,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 
 **Phase 2 — High-Severity Bug Fixes**
 - [x] 2.1 [H1] Cap the collision-rename loop
-- [ ] 2.2 [H2] Make cancellation thread-safe
+- [x] 2.2 [H2] Make cancellation thread-safe
 - [ ] 2.3 [H3] Validate destinations on change
 - [ ] 2.4 [H4] Filter stale recent destinations
 - [ ] 2.5 [H5] Document/log cross-FS move risk
@@ -141,12 +141,18 @@ Goal: close the latent bugs identified in the evaluation.
 - [x] Commit: `fix: cap filename-collision loop to prevent thread hang`
 
 ### 2.2 [H2] Make cancellation thread-safe
-- [ ] Replace `self._cancelled: bool` with `self._cancelled = threading.Event()` (or `QAtomicInt`)
-- [ ] Replace assignments (`self._cancelled = True`) with `self._cancelled.set()`
-- [ ] Replace reads (`if self._cancelled`) with `if self._cancelled.is_set()`
-- [ ] Audit every call site in `FileOperationWorker`
-- [ ] Add test: cancel mid-copy on a large temp file → worker exits, partial file removed
-- [ ] Commit: `fix: use threading.Event for cancellation to avoid GIL-only atomicity`
+- [x] Replace `self._cancelled: bool` with `self._cancelled = threading.Event()`
+- [x] Replace `self._cancelled = True` with `self._cancelled.set()` in `cancel()`
+- [x] Replace `if self._cancelled` reads in `run()` and `_chunked_copy` with `is_set()`
+- [x] Add public `is_cancelled()` method for read access (keeps internals private)
+- [x] Audit every call site in `FileOperationWorker` — 4 references converted (`grep _cancelled` confirms)
+- [x] Add tests in `test_cancellation.py`:
+  - [x] Event is clear at construction
+  - [x] `cancel()` sets the event
+  - [x] Pre-cancelled `_chunked_copy` raises `InterruptedError` and cleans partial file
+  - [x] Pre-cancelled `run()` skips all queued ops, reports them as skipped
+  - [x] Realistic race: background-thread `cancel()` during in-flight `_chunked_copy` → either clean completion or clean abort
+- [x] Commit: `fix: use threading.Event for cancellation to avoid GIL-only atomicity`
 
 ### 2.3 [H3] Validate destinations on change
 - [ ] In `_on_destination_changed` (≈ app.py:857), check `Path(text).exists()` and `os.access(path, os.W_OK)`
