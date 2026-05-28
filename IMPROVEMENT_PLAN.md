@@ -55,7 +55,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 **Phase 7 — Verification & Wrap-Up**
 - [ ] 7.1 All commits merged, CI green
 - [ ] 7.2 Manual smoke test pass
-- [ ] 7.3 README updated
+- [x] 7.3 README updated
 - [ ] 7.4 Version bump + release
 
 ---

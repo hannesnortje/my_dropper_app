@@ -29,8 +29,11 @@ my-dropper-app
 - **Progress Tracking** - Real-time progress bar for file operations
 - **Cancel Operations** - Ability to cancel long-running operations
 - **Non-blocking UI** - All file operations run in background threads
-- **Recent Destinations** - Quick access to recently used destinations
+- **Recent Destinations** - Quick access to recently used destinations (stale paths auto-pruned)
 - **Open Destination** - One-click button to open destination folder
+- **Keyboard Shortcuts** - <kbd>Ctrl</kbd>+<kbd>O</kbd>, <kbd>Esc</kbd>, <kbd>F1</kbd>, and more — full reference in-app
+- **Accessibility** - Every interactive control has a screen-reader-friendly name and a hover tooltip
+- **About Dialog** - Version, license, and repository link via the `ℹ️ About` button
 
 ### Smart Features
 - **Automatic Renaming** - Files with duplicate names are automatically renamed
@@ -215,15 +218,24 @@ Settings are stored using Qt's QSettings:
 
 ```
 my_dropper_app/
-├── pyproject.toml              # Package configuration
+├── pyproject.toml              # Package configuration + dev extras
 ├── README.md
 ├── LICENSE                     # GPL-3.0
 ├── launch.sh                   # Launch script
 ├── my_dropper_icon.svg         # App icon
-└── src/my_dropper_app/
-    ├── __init__.py             # Package init
-    ├── __main__.py             # python -m entry point
-    └── app.py                  # Main application
+├── .github/workflows/
+│   ├── ci.yml                  # Pytest on push/PR (Python 3.9/3.11/3.12)
+│   └── release.yml             # Tag-triggered sdist+wheel GitHub Release
+├── src/my_dropper_app/
+│   ├── __init__.py             # Package init + version/author/license
+│   ├── __main__.py             # python -m entry point
+│   ├── app.py                  # FileDropperApp widget + main()
+│   ├── constants.py            # APP_NAME, settings keys, sizes, timeouts
+│   ├── models.py               # Enums + dataclasses (no Qt dep)
+│   ├── parsing.py              # Pure helpers (validation, rename, parsing)
+│   ├── theme.py                # Light / dark Qt stylesheets
+│   └── worker.py               # FileOperationWorker (QThread)
+└── tests/                      # Pytest suite (~95 tests)
 ```
 
 ## Development
@@ -234,8 +246,8 @@ my_dropper_app/
 git clone https://github.com/hannesnortje/my_dropper_app.git
 cd my_dropper_app
 python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-pip install -e .
+source .venv/bin/activate          # or .venv\Scripts\activate on Windows
+pip install -e ".[dev]"            # includes pytest + pytest-qt
 ```
 
 ### Run in Development
@@ -246,54 +258,112 @@ my-dropper-app
 python -m my_dropper_app
 ```
 
+### Run the Tests
+
+```bash
+QT_QPA_PLATFORM=offscreen pytest -v
+```
+
+The offscreen Qt platform plugin lets the suite run without a display, so
+the same command works locally and in CI. There are ~95 tests covering
+pure-logic helpers (filename collisions, JSON parsing, path validation,
+cross-FS moves, symlink handling, cancellation, defensive settings load)
+plus widget smoke tests for accessibility and keyboard shortcuts.
+
 ### Architecture
 
+The codebase is split into focused modules so the widget code stays
+focused on UI concerns and the pure logic is independently testable.
+
 ```
-┌─────────────────────────────────────────────────┐
-│              FileDropperApp (Main UI)           │
-├─────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌────────────────────────┐   │
-│  │  Settings   │  │     Drop Zone          │   │
-│  │  (QSettings)│  │  (Drag & Drop Events)  │   │
-│  └─────────────┘  └────────────────────────┘   │
-│                          │                      │
-│                          ▼                      │
-│  ┌──────────────────────────────────────────┐  │
-│  │      FileOperationWorker (QThread)       │  │
-│  │  - Runs in background                    │  │
-│  │  - Emits progress signals                │  │
-│  │  - Supports cancellation                 │  │
-│  └──────────────────────────────────────────┘  │
-│                          │                      │
-│                          ▼                      │
-│  ┌──────────────────────────────────────────┐  │
-│  │         Progress UI & Output Log         │  │
-│  └──────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────┘
+                    ┌───────────────────────────────┐
+                    │  app.py — FileDropperApp      │
+                    │  (Qt widget, drag-drop, UI)   │
+                    └────┬─────────────────┬────────┘
+                         │                 │
+            emits drop   │                 │ starts in background
+                         ▼                 ▼
+                ┌──────────────┐   ┌────────────────────────┐
+                │ parsing.py   │   │ worker.py              │
+                │ — pure       │   │ FileOperationWorker    │
+                │ helpers      │   │ (QThread)              │
+                │ (validators, │   │  - chunked copy        │
+                │ rename,      │   │  - cross-FS-safe move  │
+                │ JSON parser, │   │  - symlink-skip policy │
+                │ utf-8 save)  │   │  - threading.Event     │
+                └──────┬───────┘   │    cancel              │
+                       │           └─────┬──────────────────┘
+                       ▼                 │
+                ┌──────────────┐         │ emits signals
+                │ models.py    │         │
+                │ Enums +      │         ▼
+                │ dataclasses  │   ┌────────────────────────┐
+                └──────────────┘   │ app.py log + progress  │
+                                   └────────────────────────┘
+
+   constants.py  ←  shared by all modules (sizes, keys, timeouts)
+   theme.py      ←  applied by app.py (LIGHT_STYLE / DARK_STYLE)
 ```
 
 ### Key Components
 
-| Component | Description |
-|-----------|-------------|
-| `FileDropperApp` | Main application class (QWidget) |
-| `FileOperationWorker` | QThread for background file operations |
-| `OperationMode` | Enum for copy/move operations |
-| `FileOperation` | Dataclass for a single file operation |
-| `OperationResult` | Dataclass for operation results |
+| Component | Module | Description |
+|---|---|---|
+| `FileDropperApp` | `app.py` | Main widget (QWidget); drag-drop, settings, UI assembly |
+| `FileOperationWorker` | `worker.py` | QThread for background copy / move; threading.Event cancel |
+| `validate_destination` | `parsing.py` | Returns reason string or None for a path |
+| `prune_stale_destinations` | `parsing.py` | Filters a recent-destinations list down to existing dirs |
+| `get_unique_destination` | `parsing.py` | Generates `name (N).ext` to avoid collisions (bounded loop) |
+| `parse_text_for_filename` | `parsing.py` | Picks a filename + extension from dropped JSON / text |
+| `save_text_utf8_with_fallback` | `parsing.py` | UTF-8 write with `errors='replace'` fallback |
+| `OperationMode` / `FileOperation` / `OperationResult` | `models.py` | Plain enums + dataclasses, no Qt dependency |
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
 | PyQt6 not found | `pip install PyQt6` |
+| `xdg-open not found` on the Open button (Linux) | `sudo apt install xdg-utils` (or your distro's equivalent) |
 | Permission denied on launch.sh | `chmod +x launch.sh` |
 | Files not copying | Check destination permissions and disk space |
 | Dark mode not applying | Toggle off/on or restart the app |
+| Symlink dropped but nothing happened | Expected — see [Symlink Handling](#symlink-handling) above |
 
 ## Changelog
 
-### v2.0.0 (Current)
+### v2.1.0 (Unreleased)
+
+**Reliability fixes**
+- 🐛 Bounded filename-collision rename loop (couldn't hang on pathological destinations)
+- 🐛 Cancellation flag is now a `threading.Event` rather than a bare bool — portable cross-thread safety, not just GIL-dependent
+- 🐛 Cross-filesystem moves now explicit copy → verify → delete with phase-labelled errors (`"file now in BOTH locations"`, `"size mismatch; destination removed"`, etc.)
+- 🐛 Top-level symlinks are skipped (with a clear log line); nested symlinks inside a copied tree are preserved as symlinks so circular structures stay finite
+- 🐛 Stale entries in the recent-destinations dropdown are pruned at startup and after a failed pick — no more silent rejections
+- 🐛 Defensive settings load: corrupt / hand-edited QSettings can no longer prevent the app from starting
+- 🐛 Drag-and-drop now falls back to the text payload when dropped URLs are non-local (e.g. `ior:local:` schemes from web sources)
+- 🐛 Text drops with non-UTF-8 bytes (mangled clipboards, unpaired surrogates) save with replacement chars + a warning instead of failing
+- 🐛 Latent bug fixed: drag-active state on the drop zone (green border + tint) is now actually visible — was previously overwritten by `_apply_theme`
+
+**UX & accessibility**
+- ✨ Keyboard shortcuts: <kbd>Ctrl</kbd>+<kbd>O</kbd>, <kbd>Ctrl</kbd>+<kbd>L</kbd>, <kbd>Ctrl</kbd>+<kbd>D</kbd>, <kbd>Esc</kbd>, <kbd>Ctrl</kbd>+<kbd>Q</kbd>, <kbd>F1</kbd>
+- ✨ <kbd>F1</kbd> opens an in-app shortcuts reference dialog
+- ✨ About dialog showing version, author, license, and repository link
+- ✨ Every interactive control has `accessibleName` + `accessibleDescription` for screen readers
+- ✨ Every clickable control has a hover tooltip — keyboard-shortcut hints included where applicable
+- ✨ Activity log bounded at 5 000 lines (Qt auto-discards oldest blocks; newest survive)
+- ✨ Per-platform "open folder" error messages — Linux now tells you when `xdg-utils` is missing
+
+**Engineering**
+- 📦 Test suite added from scratch (~95 tests covering pure logic, cross-FS moves, symlinks, cancellation, settings, drop routing, a11y wiring)
+- 📦 GitHub Actions CI workflow on Python 3.9, 3.11, 3.12 (`ci.yml`)
+- 📦 GitHub Actions release workflow on `v*` tags — builds sdist + wheel, attaches to GitHub Release (`release.yml`)
+- 🧹 Removed duplicated standalone `my_dropper_app_qt6.py` script
+- 🧹 Removed 10 unused imports and a dead settings constant; ruff `F401` clean
+- 🧹 Split monolithic `app.py` (1518 LOC) into focused modules — `constants`, `models`, `theme`, `parsing`, `worker`
+- 🧹 Consolidated duplicated destination-mkdir logic into one helper
+- 🧹 All magic numbers (chunk size, large-file threshold, GB constants, timeouts) pulled into named constants
+
+### v2.0.0
 - ✨ Background threading for file operations
 - ✨ Progress bar with cancel support
 - ✨ Full directory copy/move support
@@ -330,8 +400,9 @@ See [LICENSE](LICENSE) for details.
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+4. Run the test suite: `QT_QPA_PLATFORM=offscreen pytest -v`
+5. (Recommended) run `ruff check --select F401 src/` to catch unused imports
+6. Submit a pull request — CI will re-run the suite on Python 3.9, 3.11, and 3.12
 
 ## Support
 
