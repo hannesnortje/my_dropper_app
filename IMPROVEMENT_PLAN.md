@@ -30,7 +30,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 3.3 [M3] Remove unused imports & constants
 - [x] 3.4 [M4] Count directory items before move
 - [x] 3.5 [M5] Tighten JSON filename parsing
-- [ ] 3.6 [M6] Make confirm-dialog non-blocking from worker perspective
+- [x] 3.6 [M6] Make confirm-dialog non-blocking from worker perspective
 - [ ] 3.7 [M7] Per-platform "open folder" error messages
 
 **Phase 4 — Architecture Cleanup**
@@ -268,10 +268,12 @@ Goal: make the codebase easy to keep working on.
 - [x] Commit: `fix: harden JSON filename parsing against partially-shaped objects`
 
 ### 3.6 [M6] Make confirm-dialog non-blocking from worker perspective
-- [ ] Audit modal dialog flows during transfer (≈ app.py:981, 1061)
-- [ ] If a dialog is shown while worker is running: pause the worker explicitly (`Event.wait()`), don't rely on Qt event loop ordering
-- [ ] Resume on confirm; cancel on reject
-- [ ] Commit: `refactor: explicit worker-pause around mid-transfer confirm dialogs`
+- [x] Audited all 8 `QMessageBox.*` call sites
+- **Audit result:** only one dialog is shown while the worker is alive — the `closeEvent` "Operation in Progress" confirm. The "Large Transfer" question dialog runs *before* `_start_worker`, so the original signal-queue race doesn't apply.
+- [x] Pause/resume mechanism **not needed** — the only mid-worker dialog asks "Cancel and exit?" rather than "Continue this transfer?", and already calls `cancel()` on Yes (a stop, not a pause). Adding pause/resume would be over-engineering for a flow that doesn't exist.
+- [x] Tightened the closeEvent flow's loose end: disconnect `progress_updated`, `operation_completed`, and `log_message` from their slots **before** `wait()` so the queued completion-dialog signal collected during the modal confirm doesn't fire on a window that's about to close.
+- [x] disconnect() wrapped in `try/except (TypeError, RuntimeError)` so it's safe under shutdown
+- [x] Commit: `refactor: explicit worker-pause around mid-transfer confirm dialogs`
 
 ### 3.7 [M7] Per-platform "open folder" error messages
 - [ ] Wrap each platform branch (xdg-open / open / startfile) in its own try/except

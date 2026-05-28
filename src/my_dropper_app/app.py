@@ -1404,6 +1404,20 @@ class FileDropperApp(QWidget):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply == QMessageBox.StandardButton.Yes:
+                # Detach the worker's signals BEFORE waiting so the queued
+                # operation_completed / log / progress emissions (collected
+                # while the modal dialog was open) don't fire stale handlers
+                # on a window that's about to close. wait() itself does not
+                # drain the queue — handlers would otherwise run when control
+                # returns to the event loop after the close.
+                try:
+                    self.worker.progress_updated.disconnect(self._on_progress_updated)
+                    self.worker.operation_completed.disconnect(self._on_operation_completed)
+                    self.worker.log_message.disconnect(self._log)
+                except (TypeError, RuntimeError):
+                    # disconnect() raises if the signal was already detached;
+                    # safe to ignore in shutdown.
+                    pass
                 self.worker.cancel()
                 self.worker.wait(WORKER_SHUTDOWN_TIMEOUT_MS)
             else:
