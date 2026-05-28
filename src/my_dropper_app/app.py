@@ -163,6 +163,10 @@ class FileDropperApp(QWidget):
         self.dark_mode_checkbox = QCheckBox("🌙 Dark Mode")
         self.dark_mode_checkbox.setChecked(self.is_dark_mode)
         self.dark_mode_checkbox.toggled.connect(self._toggle_dark_mode)
+        self.dark_mode_checkbox.setAccessibleName("Dark mode toggle")
+        self.dark_mode_checkbox.setAccessibleDescription(
+            "Switch between light and dark themes"
+        )
         header_layout.addWidget(self.dark_mode_checkbox)
 
         main_layout.addLayout(header_layout)
@@ -188,12 +192,20 @@ class FileDropperApp(QWidget):
         self.destination_combo.lineEdit().setReadOnly(True)
         self._populate_recent_destinations()
         self.destination_combo.currentTextChanged.connect(self._on_destination_changed)
+        self.destination_combo.setAccessibleName("Destination folder")
+        self.destination_combo.setAccessibleDescription(
+            "Currently selected destination folder and recent choices"
+        )
         settings_layout.addWidget(self.destination_combo, 1)
 
         browse_button = QPushButton("Browse...")
         browse_button.setObjectName("secondaryButton")
         browse_button.setFixedWidth(100)
         browse_button.clicked.connect(self._browse_destination)
+        browse_button.setAccessibleName("Browse destination")
+        browse_button.setAccessibleDescription(
+            "Open a folder picker to choose where dropped files are saved"
+        )
         settings_layout.addWidget(browse_button)
 
         self.open_dest_button = QPushButton("📂 Open")
@@ -201,6 +213,10 @@ class FileDropperApp(QWidget):
         self.open_dest_button.setFixedWidth(80)
         self.open_dest_button.setToolTip("Open destination folder")
         self.open_dest_button.clicked.connect(self._open_destination)
+        self.open_dest_button.setAccessibleName("Open destination folder")
+        self.open_dest_button.setAccessibleDescription(
+            "Open the destination folder in the system file manager"
+        )
         settings_layout.addWidget(self.open_dest_button)
 
         main_layout.addLayout(settings_layout)
@@ -216,11 +232,19 @@ class FileDropperApp(QWidget):
         self.copy_radio = QCheckBox("📋 Copy files")
         self.copy_radio.setChecked(self.operation_mode == OperationMode.COPY)
         self.copy_radio.toggled.connect(self._on_mode_changed)
+        self.copy_radio.setAccessibleName("Copy mode")
+        self.copy_radio.setAccessibleDescription(
+            "Copy dropped files to the destination, leaving the source in place"
+        )
         mode_layout.addWidget(self.copy_radio)
 
         self.move_radio = QCheckBox("✂️ Move files")
         self.move_radio.setChecked(self.operation_mode == OperationMode.MOVE)
         self.move_radio.toggled.connect(lambda checked: self._on_mode_changed(not checked))
+        self.move_radio.setAccessibleName("Move mode")
+        self.move_radio.setAccessibleDescription(
+            "Move dropped files to the destination, removing them from the source"
+        )
         mode_layout.addWidget(self.move_radio)
 
         mode_layout.addStretch()
@@ -232,6 +256,10 @@ class FileDropperApp(QWidget):
         self.drop_label.setObjectName("dropLabel")
         self.drop_label.setMinimumHeight(120)
         self.drop_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.drop_label.setAccessibleName("Drop zone")
+        self.drop_label.setAccessibleDescription(
+            "Drop files, folders, or text here to save them to the destination folder"
+        )
         main_layout.addWidget(self.drop_label)
 
         # Progress section
@@ -250,12 +278,20 @@ class FileDropperApp(QWidget):
         self.cancel_button.setFixedWidth(80)
         self.cancel_button.clicked.connect(self._cancel_operation)
         self.cancel_button.setVisible(False)
+        self.cancel_button.setAccessibleName("Cancel transfer")
+        self.cancel_button.setAccessibleDescription(
+            "Stop the file operation that is currently running"
+        )
         progress_header.addWidget(self.cancel_button)
 
         progress_layout.addLayout(progress_header)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
+        self.progress_bar.setAccessibleName("Transfer progress")
+        self.progress_bar.setAccessibleDescription(
+            "Shows how many items of the active operation have completed"
+        )
         progress_layout.addWidget(self.progress_bar)
 
         main_layout.addWidget(self.progress_widget)
@@ -271,6 +307,10 @@ class FileDropperApp(QWidget):
         )
         self.output_text.setReadOnly(True)
         self.output_text.setMinimumHeight(150)
+        self.output_text.setAccessibleName("Activity log")
+        self.output_text.setAccessibleDescription(
+            "Read-only log of drop events, file operations, warnings, and errors"
+        )
         main_layout.addWidget(self.output_text)
 
         # Button row
@@ -280,6 +320,10 @@ class FileDropperApp(QWidget):
         clear_button = QPushButton("🗑️ Clear Log")
         clear_button.setObjectName("secondaryButton")
         clear_button.clicked.connect(self.output_text.clear)
+        clear_button.setAccessibleName("Clear log")
+        clear_button.setAccessibleDescription(
+            "Erase the contents of the activity log above"
+        )
         button_layout.addWidget(clear_button)
 
         button_layout.addStretch()

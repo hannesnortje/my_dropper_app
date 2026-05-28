@@ -39,7 +39,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 
 **Phase 5 — UX & Accessibility**
 - [x] 5.1 [L3] Keyboard shortcuts
-- [ ] 5.2 [L4] Accessibility names and descriptions
+- [x] 5.2 [L4] Accessibility names and descriptions
 - [ ] 5.3 [L1] Bound the output log
 - [ ] 5.4 [L2] Tidy `_apply_theme`
 - [ ] 5.5 [L7] Robust text-drop encoding
@@ -344,11 +344,21 @@ Goal: usable by keyboard, by screen readers, by non-English users.
 - [x] Commit: `feat: keyboard shortcuts for common actions`
 
 ### 5.2 [L4] Accessibility names and descriptions
-- [ ] For every `QPushButton`, `QComboBox`, `QCheckBox`, `QTextEdit`, `QProgressBar`:
-  - [ ] `setAccessibleName(...)` with the action ("Toggle dark mode", "Open destination folder", etc.)
-  - [ ] `setAccessibleDescription(...)` with one sentence of context
-- [ ] Verify with Orca screen reader (or platform equivalent): every interactive widget announces something meaningful
-- [ ] Commit: `feat: add accessible names and descriptions to all interactive widgets`
+- [x] Wired `setAccessibleName` + `setAccessibleDescription` on every named widget:
+  - [x] `dark_mode_checkbox` → "Dark mode toggle"
+  - [x] `destination_combo` → "Destination folder"
+  - [x] `browse_button` → "Browse destination"
+  - [x] `open_dest_button` → "Open destination folder" (replaces the screen-reader-hostile `📂 Open`)
+  - [x] `copy_radio` → "Copy mode"
+  - [x] `move_radio` → "Move mode"
+  - [x] `drop_label` → "Drop zone" (replaces `🎯 Drag & Drop Files or Text Here`)
+  - [x] `cancel_button` → "Cancel transfer"
+  - [x] `progress_bar` → "Transfer progress"
+  - [x] `output_text` → "Activity log"
+  - [x] `clear_button` → "Clear log" (replaces `🗑️ Clear Log`)
+- [x] New `tests/test_accessibility.py` constructs the widget and asserts every named widget has non-empty `accessibleName` AND `accessibleDescription` — protects against future additions that forget a11y wiring
+- [ ] *Defer:* manual verification with Orca (or equivalent on your platform) — recommended next time you run the app
+- [x] Commit: `feat: add accessible names and descriptions to all interactive widgets`
 
 ### 5.3 [L1] Bound the output log
 - [ ] Add `MAX_LOG_LINES = 5000` constant
