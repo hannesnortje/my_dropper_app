@@ -47,7 +47,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [ ] 5.7 [L5] i18n scaffolding (optional, deferred)
 
 **Phase 6 — Distribution & Polish**
-- [ ] 6.1 [L6] Remove the `.docx` from the repo
+- [x] 6.1 [L6] Remove the `.docx` from the repo
 - [ ] 6.2 Windows installer (optional)
 - [ ] 6.3 macOS bundle (optional)
 - [ ] 6.4 Release automation
@@ -423,9 +423,9 @@ Goal: usable by keyboard, by screen readers, by non-English users.
 Goal: easier to install on more platforms, smaller repo.
 
 ### 6.1 [L6] Remove the `.docx` from the repo
-- [ ] Move `my_dropper_app_qt6.docx` to a release asset, external doc, or just delete it
-- [ ] Add `*.docx` to `.gitignore` if appropriate
-- [ ] Commit: `chore: remove docx documentation from source tree`
+- [x] Deleted `my_dropper_app_qt6.docx` (~6.2 MB binary; not referenced by any code or doc)
+- [x] Added `*.docx` to `.gitignore` so future Word docs aren't accidentally committed
+- [x] Commit: `chore: remove docx documentation from source tree`
 
 ### 6.2 Windows installer (optional)
 - [ ] Decide: PyInstaller (single .exe) or Briefcase (proper installer)

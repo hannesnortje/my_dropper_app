@@ -218,3 +218,6 @@ build/
 # Documentation build
 docs/build/
 docs/_build/
+
+# Word documents — design notes live elsewhere, not in the source tree
+*.docx
