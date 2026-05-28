@@ -172,16 +172,30 @@ The app should now appear in your application menu under "Utilities" or by searc
 
 #### Using a Custom Icon
 
-If you cloned the repository, you can use the included icon:
+The repository ships two flavours of the icon:
+
+| File | Best on | Notes |
+|---|---|---|
+| `my_dropper_icon.svg` | **Light** panels / menu bars | Black strokes; the default |
+| `my_dropper_icon_light.svg` | **Dark** panels / menu bars | Off-white strokes; faint on light backgrounds |
+
+Pick whichever matches your desktop theme:
 
 ```bash
-# Copy icon to local icons directory
+# Copy your chosen icon to the local icons directory
 mkdir -p ~/.local/share/icons
+
+# For a LIGHT menu bar (Mint, classic GNOME, etc.):
 cp /path/to/my_dropper_app/my_dropper_icon.svg ~/.local/share/icons/my-dropper-app.svg
+
+# For a DARK menu bar (most modern GNOME / KDE Plasma):
+cp /path/to/my_dropper_app/my_dropper_icon_light.svg ~/.local/share/icons/my-dropper-app.svg
 
 # Update the desktop file to use it
 sed -i 's|Icon=folder-download|Icon=my-dropper-app|' ~/.local/share/applications/my-dropper-app.desktop
 ```
+
+If you change your theme later, just re-run the copy step with the other variant; the desktop entry's `Icon=my-dropper-app` reference stays the same.
 
 #### Desktop Environments
 
