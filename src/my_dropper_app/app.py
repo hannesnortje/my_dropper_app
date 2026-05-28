@@ -563,26 +563,26 @@ class FileOperationWorker(QThread):
                 shutil.copy2(op.source, dest_path)
             action = "Copied"
         else:
-            shutil.move(str(op.source), str(dest_path))
+            self._safe_move(op.source, dest_path)
             action = "Moved"
-        
+
         if dest_path.name != op.source.name:
             self.log_message.emit(f"✓ {action} (renamed): {op.source.name} → {dest_path.name}")
         else:
             self.log_message.emit(f"✓ {action}: {op.source.name}")
-        
+
         result.success_count += 1
         result.total_bytes += file_size
     
     def _process_directory(self, op: FileOperation, result: OperationResult) -> None:
         """Process a directory operation (recursive copy/move)."""
         dest_path = self._get_unique_destination(op.destination)
-        
+
         if self.mode == OperationMode.COPY:
             shutil.copytree(op.source, dest_path)
             action = "Copied"
         else:
-            shutil.move(str(op.source), str(dest_path))
+            self._safe_move(op.source, dest_path)
             action = "Moved"
         
         # Count items in directory
@@ -619,7 +619,90 @@ class FileOperationWorker(QThread):
         
         # Copy metadata
         shutil.copystat(source, dest)
-    
+
+    @staticmethod
+    def _is_cross_filesystem(source: Path, dest: Path) -> bool:
+        """Return True if source and the destination's parent live on
+        different filesystems (different st_dev values).
+
+        On the same filesystem `os.rename` is atomic; across filesystems
+        we must fall back to copy-then-delete and we want to know
+        upfront so we can report which phase failed.
+        """
+        try:
+            src_dev = source.stat().st_dev
+            # The destination itself may not exist yet; its parent must.
+            dst_dev = dest.parent.stat().st_dev
+        except OSError:
+            # If we can't even stat, defer to the cross-FS path which has
+            # richer error handling than os.rename.
+            return True
+        return src_dev != dst_dev
+
+    def _move_cross_filesystem(self, source: Path, dest: Path) -> None:
+        """Move across filesystems with explicit copy → verify → delete.
+
+        Each phase raises a phase-labelled RuntimeError on failure so the
+        log line tells the user whether the source is preserved, the
+        destination is corrupt, or the file now exists in BOTH locations.
+        """
+        # Phase 1: copy
+        try:
+            if source.is_dir():
+                shutil.copytree(source, dest)
+            else:
+                shutil.copy2(source, dest)
+        except Exception as e:
+            # Clean up partial destination so we don't leave junk behind
+            if dest.exists():
+                if dest.is_dir():
+                    shutil.rmtree(dest, ignore_errors=True)
+                else:
+                    dest.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"cross-filesystem copy failed (source preserved): {e}"
+            ) from e
+
+        # Phase 2: verify
+        if not dest.exists():
+            raise RuntimeError(
+                "cross-filesystem copy reported success but destination is missing"
+            )
+        if source.is_file():
+            src_size = source.stat().st_size
+            dst_size = dest.stat().st_size
+            if src_size != dst_size:
+                # Corrupt copy — drop the destination so the source remains canonical
+                dest.unlink(missing_ok=True)
+                raise RuntimeError(
+                    f"cross-filesystem copy size mismatch "
+                    f"(src={src_size}, dst={dst_size}); destination removed"
+                )
+
+        # Phase 3: delete source
+        try:
+            if source.is_dir():
+                shutil.rmtree(source)
+            else:
+                source.unlink()
+        except Exception as e:
+            raise RuntimeError(
+                f"cross-filesystem copy succeeded but source delete failed — "
+                f"file now exists in BOTH locations: {e}"
+            ) from e
+
+    def _safe_move(self, source: Path, dest: Path) -> None:
+        """Move source → dest. Atomic rename on same filesystem; explicit
+        copy-then-delete with phase-labelled errors across filesystems.
+        """
+        if self._is_cross_filesystem(source, dest):
+            self._move_cross_filesystem(source, dest)
+            return
+        # Same FS — let Path.rename give us the atomic os.rename. For
+        # consistency with shutil.move's prior behaviour we cast to str
+        # internally; pathlib uses os.rename either way on POSIX.
+        source.rename(dest)
+
     def _get_unique_destination(self, dest: Path) -> Path:
         """Get a unique destination path, renaming if necessary.
 

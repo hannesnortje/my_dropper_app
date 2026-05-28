@@ -21,7 +21,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 2.2 [H2] Make cancellation thread-safe
 - [x] 2.3 [H3] Validate destinations on change
 - [x] 2.4 [H4] Filter stale recent destinations
-- [ ] 2.5 [H5] Document/log cross-FS move risk
+- [x] 2.5 [H5] Document/log cross-FS move risk
 - [ ] 2.6 [H6] Decide on a symlink policy
 
 **Phase 3 — Code Hygiene & Maintainability**
@@ -176,11 +176,20 @@ Goal: close the latent bugs identified in the evaluation.
 - [x] Commit: `fix: prune nonexistent paths from recent-destinations on load`
 
 ### 2.5 [H5] Document/log cross-FS move risk
-- [ ] In the move branch, detect if source and destination are on different filesystems (`os.stat(...).st_dev`)
-- [ ] If different: explicitly do copy-then-verify-then-delete with separate error handling
-- [ ] Log clearly which phase failed if it does
-- [ ] Add test using two `tmp_path` directories (best-effort — true cross-FS is hard to simulate)
-- [ ] Commit: `fix: handle cross-filesystem moves explicitly to avoid silent partial state`
+- [x] Add `_is_cross_filesystem(src, dest)` detector using `st_dev`; defaults to True if either stat fails so the richer error path runs
+- [x] Add `_move_cross_filesystem(src, dest)` with three explicit phases — copy → verify (existence + file-size match) → delete-source — each raising a phase-labelled `RuntimeError`
+- [x] Cleanup logic: partial destination removed on copy failure; corrupt destination removed on size mismatch
+- [x] "File now in BOTH locations" warning when source-delete fails after a successful copy
+- [x] New `_safe_move(src, dest)` orchestrator picks `Path.rename` (atomic) for same-FS or `_move_cross_filesystem` for cross-FS
+- [x] Replace `shutil.move(...)` in `_process_file` and `_process_directory` with `self._safe_move(...)`
+- [x] 8 tests in `test_cross_fs_move.py`:
+  - [x] Detector: same-dir is `False`; missing-source defaults to `True`
+  - [x] Cross-FS file move: copies + deletes source + preserves mtime
+  - [x] Cross-FS directory move: recursive copy + source removal
+  - [x] Copy failure: source preserved, partial destination cleaned, phase-labelled error
+  - [x] Delete-after-copy failure: "BOTH locations" warning, both files remain (correct behaviour — user must intervene)
+  - [x] Size-mismatch after copy: corrupt destination removed, source preserved
+- [x] Commit: `fix: handle cross-filesystem moves explicitly to avoid silent partial state`
 
 ### 2.6 [H6] Decide on a symlink policy
 - [ ] Pick a policy: **skip** (recommended) / **follow** / **ask user**
