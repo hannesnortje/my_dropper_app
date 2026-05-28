@@ -41,7 +41,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 5.1 [L3] Keyboard shortcuts
 - [x] 5.2 [L4] Accessibility names and descriptions (+ tooltips with shortcut hints)
 - [x] 5.3 [L1] Bound the output log
-- [ ] 5.4 [L2] Tidy `_apply_theme`
+- [x] 5.4 [L2] Tidy `_apply_theme`
 - [ ] 5.5 [L7] Robust text-drop encoding
 - [ ] 5.6 Add an "About" dialog
 - [ ] 5.7 [L5] i18n scaffolding (optional, deferred)
@@ -374,8 +374,14 @@ Goal: usable by keyboard, by screen readers, by non-English users.
 - [x] Commit: `feat: bound output log size and add a clear-log button`
 
 ### 5.4 [L2] Tidy `_apply_theme`
-- [ ] Remove the redundant first `setStyleSheet()` call (≈ app.py:796)
-- [ ] Commit: `refactor: remove redundant stylesheet application in theme switch`
+- [x] Investigation revealed the original plan-line was misphrased: the *second* `setStyleSheet` call was the redundant one (`drop_label.setStyleSheet(drop_label.styleSheet())` — a self-set hack to force re-polish)
+- [x] Also discovered a latent bug: `_apply_theme` unconditionally reset `drop_label.setObjectName("dropLabel")`, silently overriding `setObjectName("dropLabelActive")` calls in `dragEnterEvent` — meaning the drag-active state never actually showed
+- [x] Cleanest fix: removed the drop_label code from `_apply_theme` entirely. It now does nothing but apply the parent stylesheet (which Qt already cascades to repolish every child). The drop-label state belongs to the drag handlers, not the theme code.
+- [x] Side effect: the drag-active state visual now works. The fix is purely structural — the active-state colours were always defined in the QSS, they just weren't reachable.
+- [x] 2 regression tests in `test_drop_label_state.py`:
+  - [x] `_apply_theme` leaves a manually-set `dropLabelActive` object name alone
+  - [x] `_apply_theme` doesn't change the default `dropLabel` object name when invoked idle
+- [x] Commit: `refactor: remove redundant stylesheet application in theme switch`
 
 ### 5.5 [L7] Robust text-drop encoding
 - [ ] Try UTF-8 first; on `UnicodeEncodeError`, fall back to UTF-8 with `errors="replace"` and log a warning

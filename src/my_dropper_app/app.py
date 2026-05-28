@@ -399,14 +399,17 @@ class FileDropperApp(QWidget):
                 self.destination_combo.addItem(dest)
 
     def _apply_theme(self) -> None:
-        """Apply the current theme (light or dark)."""
+        """Apply the current theme (light or dark) to the whole widget tree.
+
+        `setStyleSheet` on the parent repolishes all children, so QSS
+        selectors that depend on each widget's current objectName (e.g.
+        `QLabel#dropLabel` vs `QLabel#dropLabelActive`) pick up the
+        right rules without any further intervention. Callers that
+        change a child's objectName immediately before calling here
+        will see the new state reflected.
+        """
         style = DARK_STYLE if self.is_dark_mode else LIGHT_STYLE
         self.setStyleSheet(style)
-
-        # Update drop label style name based on state
-        if hasattr(self, 'drop_label'):
-            self.drop_label.setObjectName("dropLabel")
-            self.drop_label.setStyleSheet(self.drop_label.styleSheet())
 
     def _toggle_dark_mode(self, enabled: bool) -> None:
         """Toggle dark mode on/off."""
