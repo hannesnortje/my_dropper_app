@@ -215,12 +215,6 @@ build/
 # Qt Designer files (if using Qt Designer)
 *.ui
 
-# Test files and directories
-test_*
-*_test.py
-tests/
-testing/
-
 # Documentation build
 docs/build/
 docs/_build/

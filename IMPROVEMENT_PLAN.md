@@ -13,7 +13,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 
 **Phase 1 — Stop the Bleeding**
 - [x] 1.1 [C1] Eliminate the duplicate app file
-- [ ] 1.2 [C2] Stand up a test harness
+- [x] 1.2 [C2] Stand up a test harness
 - [ ] 1.3 Add a minimal CI workflow
 
 **Phase 2 — High-Severity Bug Fixes**
@@ -75,32 +75,40 @@ Goal: one source of truth, basic test coverage so future changes don't silently 
 - [x] Commit: `refactor: remove duplicated legacy standalone script`
 
 ### 1.2 [C2] Stand up a test harness
-- [ ] Add `pytest` and `pytest-qt` to a new `[project.optional-dependencies]` `dev` group in `pyproject.toml`
-- [ ] Create `tests/` directory with `__init__.py` and `conftest.py`
-- [ ] Add `tests/test_filename_collision.py` — covers `_get_unique_destination`:
-  - [ ] No collision: returns original path
-  - [ ] One collision: returns `name (1).ext`
-  - [ ] Sequential collisions: `(1)`, `(2)`, `(3)`
-  - [ ] Extensionless files
-  - [ ] Files with multiple dots (`archive.tar.gz`)
-- [ ] Add `tests/test_text_parsing.py` — covers `_parse_text_for_filename`:
-  - [ ] Valid JSON with `ior.modelId`
-  - [ ] Valid JSON with `publicData.name`
-  - [ ] Valid JSON with neither key
-  - [ ] Malformed JSON (returns fallback)
-  - [ ] Empty string
-  - [ ] Non-JSON plain text
-- [ ] Add `tests/test_file_ops.py` using `tmp_path`:
-  - [ ] Copy single file
-  - [ ] Move single file
-  - [ ] Copy directory recursively
-  - [ ] Move directory recursively
-  - [ ] Copy preserves metadata (mtime)
-- [ ] Add `tests/test_settings.py`:
-  - [ ] Load with no prior settings → defaults
-  - [ ] Load with corrupt/wrong-type values → falls back to defaults without crashing
-- [ ] Run `pytest` locally — all green
-- [ ] Commit: `test: add pytest harness with coverage for pure-logic helpers`
+- [x] Add `pytest` and `pytest-qt` to a new `[project.optional-dependencies]` `dev` group in `pyproject.toml`
+- [x] Create `tests/` directory with `__init__.py` and `conftest.py`
+- [x] Remove `tests/`, `test_*`, `*_test.py` patterns from `.gitignore` *(they were hiding the new suite)*
+- [x] Add `tests/test_filename_collision.py` — covers `_get_unique_destination`:
+  - [x] No collision: returns original path
+  - [x] One collision: returns `name (1).ext`
+  - [x] Sequential collisions: `(1)`, `(2)`, `(3)`
+  - [x] Extensionless files
+  - [x] Files with multiple dots (`archive.tar.gz`)
+  - [x] Directory collisions (bonus)
+- [x] Add `tests/test_text_parsing.py` — covers `_parse_text_for_filename`:
+  - [x] Valid JSON with `ior.modelId`
+  - [x] Valid JSON with `publicData.name` (plus unsafe-character stripping)
+  - [x] Valid JSON with neither key
+  - [x] Malformed JSON (returns fallback)
+  - [x] Empty string
+  - [x] Non-JSON plain text
+  - [x] Top-level JSON array (bonus)
+  - [x] Whitespace-only `modelId` (bonus)
+- [x] Add `tests/test_file_ops.py` using `tmp_path`:
+  - [x] Copy single file
+  - [x] Move single file
+  - [x] Copy directory recursively
+  - [x] Move directory recursively
+  - [x] Copy preserves metadata (mtime)
+  - [x] Chunked-copy path for >10 MB files (bonus)
+  - [x] Copy renames on collision (bonus)
+- [x] Add `tests/test_settings.py`:
+  - [x] Load with no prior settings → defaults
+  - [x] Round-trip persistence (bonus)
+  - [x] Load with corrupt/wrong-type values → falls back to defaults without crashing
+  - *Note: deeper settings coverage is deferred to Phase 4.2 where `_load_settings` will be extracted into a testable method.*
+- [x] Run `pytest` locally — **27 passed in 0.37s** under `QT_QPA_PLATFORM=offscreen`
+- [x] Commit: `test: add pytest harness with coverage for pure-logic helpers`
 
 ### 1.3 Add a minimal CI workflow
 - [ ] Create `.github/workflows/ci.yml`
