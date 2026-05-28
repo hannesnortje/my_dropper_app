@@ -510,7 +510,16 @@ class FileOperationWorker(QThread):
             self.progress_updated.emit(i, total_ops, f"Processing: {op.source.name}")
             
             try:
-                if op.source.is_file():
+                # is_symlink() must come first — is_file() and is_dir()
+                # silently follow symlinks, which would copy the target
+                # (potentially recursing into a loop) without the user
+                # ever knowing they dropped a symlink.
+                if op.source.is_symlink():
+                    self.log_message.emit(
+                        f"⏭ Skipped symlink (not followed): {op.source.name}"
+                    )
+                    result.skipped_count += 1
+                elif op.source.is_file():
                     self._process_file(op, result)
                 elif op.source.is_dir():
                     self._process_directory(op, result)
@@ -579,7 +588,10 @@ class FileOperationWorker(QThread):
         dest_path = self._get_unique_destination(op.destination)
 
         if self.mode == OperationMode.COPY:
-            shutil.copytree(op.source, dest_path)
+            # symlinks=True preserves nested symlinks as symlinks rather than
+            # following them, which prevents infinite recursion on circular
+            # links and avoids silently bloating the destination.
+            shutil.copytree(op.source, dest_path, symlinks=True)
             action = "Copied"
         else:
             self._safe_move(op.source, dest_path)
@@ -646,10 +658,10 @@ class FileOperationWorker(QThread):
         log line tells the user whether the source is preserved, the
         destination is corrupt, or the file now exists in BOTH locations.
         """
-        # Phase 1: copy
+        # Phase 1: copy (preserve nested symlinks rather than following them)
         try:
             if source.is_dir():
-                shutil.copytree(source, dest)
+                shutil.copytree(source, dest, symlinks=True)
             else:
                 shutil.copy2(source, dest)
         except Exception as e:

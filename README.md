@@ -91,6 +91,12 @@ python -m my_dropper_app  # As module
 5. **Open destination** - Click "📂 Open" to view saved files
 6. **Toggle theme** - Use "🌙 Dark Mode" for a darker interface
 
+### Symlink Handling
+
+- **Top-level symlinks are skipped, not followed.** If you drop a symbolic link directly, the app logs `⏭ Skipped symlink (not followed)` and leaves both the link and its target untouched. Drop the real path instead if you want to copy or move it.
+- **Symlinks inside a dropped directory are preserved as symlinks** in the destination. This keeps recursive structures (e.g. a folder containing a link back to itself) safe and avoids silently duplicating large targets.
+- **Broken symlinks are skipped** with the same message.
+
 ### Adding to Application Menu (Linux)
 
 To add File Dropper to your application menu on Ubuntu, Kubuntu, and other Linux distributions:

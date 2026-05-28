@@ -22,7 +22,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 2.3 [H3] Validate destinations on change
 - [x] 2.4 [H4] Filter stale recent destinations
 - [x] 2.5 [H5] Document/log cross-FS move risk
-- [ ] 2.6 [H6] Decide on a symlink policy
+- [x] 2.6 [H6] Decide on a symlink policy
 
 **Phase 3 — Code Hygiene & Maintainability**
 - [ ] 3.1 [M1] Extract magic numbers to named constants
@@ -192,13 +192,17 @@ Goal: close the latent bugs identified in the evaluation.
 - [x] Commit: `fix: handle cross-filesystem moves explicitly to avoid silent partial state`
 
 ### 2.6 [H6] Decide on a symlink policy
-- [ ] Pick a policy: **skip** (recommended) / **follow** / **ask user**
-- [ ] In recursion, check `Path.is_symlink()` BEFORE `is_dir()` / `is_file()`
-- [ ] If skip: log `"⏭ Skipped symlink: <path>"` and continue
-- [ ] Add test: directory containing a circular symlink → no recursion explosion
-- [ ] Add test: broken symlink → handled gracefully
-- [ ] Document the chosen behavior in the README
-- [ ] Commit: `fix: detect and skip symlinks to avoid infinite recursion and broken-link crashes`
+- [x] **Chosen policy: skip top-level symlinks; preserve nested symlinks as symlinks**
+- [x] Top level: `run()` checks `op.source.is_symlink()` BEFORE `is_file()` / `is_dir()`, logs `⏭ Skipped symlink (not followed): ...`, and counts as skipped
+- [x] Inside trees: `shutil.copytree` calls in `_process_directory` and `_move_cross_filesystem` now pass `symlinks=True` so circular links don't recurse
+- [x] 5 tests in `test_symlinks.py` (POSIX-only, marked skip on Windows):
+  - [x] Top-level symlink to file → skipped, source untouched
+  - [x] Top-level symlink to directory → skipped
+  - [x] Top-level broken symlink → skipped
+  - [x] Directory containing an inner symlink → inner symlink preserved as a symlink in the destination (not silently materialised)
+  - [x] Directory containing a circular symlink → run completes without recursion explosion
+- [x] Document the policy in README under "Usage → Symlink Handling"
+- [x] Commit: `fix: detect and skip symlinks to avoid infinite recursion and broken-link crashes`
 
 ---
 
