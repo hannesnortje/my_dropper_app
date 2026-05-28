@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "my-dropper-app"
-version = "2.0.0"
+version = "2.1.0"
 description = "A modern drag & drop file organizer with PyQt6 - copy or move files to a destination folder"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}

@@ -331,7 +331,7 @@ focused on UI concerns and the pure logic is independently testable.
 
 ## Changelog
 
-### v2.1.0 (Unreleased)
+### v2.1.0
 
 **Reliability fixes**
 - 🐛 Bounded filename-collision rename loop (couldn't hang on pathological destinations)
