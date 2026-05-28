@@ -1184,34 +1184,65 @@ class FileDropperApp(QWidget):
         self._apply_theme()
         event.accept()
     
+    @staticmethod
+    def _extract_local_files(mime) -> List[Path]:
+        """Return Path objects for any file:// URLs in the mime data.
+
+        Custom URL schemes (e.g. "ior:local:...") are silently filtered
+        — they're never local files, and the caller will fall back to
+        the text payload instead.
+        """
+        if not mime.hasUrls():
+            return []
+        return [
+            Path(url.toLocalFile())
+            for url in mime.urls()
+            if url.isLocalFile()
+        ]
+
     def dropEvent(self, event: QDropEvent) -> None:
-        """Handle drop event."""
+        """Handle drop event.
+
+        Order of preference:
+          1. local file URLs   -> _process_dropped_files
+          2. text payload      -> _process_dropped_text
+        A drag from a web page that uses a custom URL scheme (e.g.
+        "ior:local:...") typically carries both a non-local URL AND
+        the JSON payload as text/plain — we want the text branch in
+        that case rather than silently ignoring the drop.
+        """
         self.drop_label.setObjectName("dropLabel")
         self.drop_label.setText("🎯 Drag & Drop Files or Text Here")
         self._apply_theme()
-        
+
         self._log("\n" + "─" * 50)
         self._log(f"📥 New Drop Event - {self.operation_mode.name} mode")
         self._log("─" * 50)
-        
-        if event.mimeData().hasUrls():
-            file_paths = []
-            for url in event.mimeData().urls():
-                if url.isLocalFile():
-                    file_paths.append(Path(url.toLocalFile()))
-                else:
-                    self._log(f"⚠️ Skipping non-local URL: {url.toString()}")
-            
-            if file_paths:
-                self._process_dropped_files(file_paths)
-        elif event.mimeData().hasText():
-            self._process_dropped_text(event.mimeData().text())
+
+        mime = event.mimeData()
+        file_paths = self._extract_local_files(mime)
+        if file_paths:
+            self._process_dropped_files(file_paths)
+            event.acceptProposedAction()
+            return
+
+        if mime.hasText():
+            text = mime.text()
+            if text:
+                self._process_dropped_text(text)
+                event.acceptProposedAction()
+                return
+
+        # Nothing usable. Tell the user what was offered so they know why.
+        if mime.hasUrls():
+            non_local = [u.toString() for u in mime.urls() if not u.isLocalFile()]
+            self._log(
+                f"❌ Dropped {len(non_local)} non-local URL(s) and no text "
+                f"payload was attached: {non_local}"
+            )
         else:
             self._log("❌ Dropped data format not supported")
-            event.ignore()
-            return
-        
-        event.acceptProposedAction()
+        event.ignore()
     
     def _process_dropped_files(self, file_paths: List[Path]) -> None:
         """Process dropped files using worker thread."""
