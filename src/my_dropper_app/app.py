@@ -1095,23 +1095,56 @@ class FileDropperApp(QWidget):
             return False
 
     def _open_destination(self) -> None:
-        """Open the destination directory in file manager."""
+        """Open the destination directory in file manager.
+
+        Each platform gets its own try/except so the user sees a message
+        that names the actual failure mode (tool missing vs. tool failed
+        vs. OS-level error) rather than a generic "Could not open" line.
+        """
         path = self.destination_directory
         if not self._ensure_destination_exists(path):
             return
-        
+
         system = platform.system()
-        try:
-            if system == "Darwin":  # macOS
+        if system == "Darwin":
+            try:
                 subprocess.run(["open", str(path)], check=True)
-            elif system == "Windows":
+                self._log(f"📂 Opened: {path}")
+            except FileNotFoundError:
+                # 'open' is a standard macOS command; missing it would be
+                # extraordinary, but report it cleanly instead of generic.
+                self._log("❌ 'open' command not found — this should not happen on macOS")
+            except subprocess.CalledProcessError as e:
+                self._log(f"❌ 'open' failed (exit {e.returncode})")
+            except OSError as e:
+                self._log(f"❌ Could not open directory: {e}")
+                logger.exception("Failed to open destination on macOS")
+        elif system == "Windows":
+            try:
                 os.startfile(str(path))
-            else:  # Linux
+                self._log(f"📂 Opened: {path}")
+            except OSError as e:
+                # os.startfile raises OSError on failure (e.g. missing
+                # association, permission denied). Previously this was
+                # entirely unguarded.
+                self._log(f"❌ Could not open in Explorer: {e}")
+                logger.exception("Failed to open destination on Windows")
+        else:
+            try:
                 subprocess.run(["xdg-open", str(path)], check=True)
-            self._log(f"📂 Opened: {path}")
-        except Exception as e:
-            self._log(f"❌ Could not open directory: {e}")
-            logger.exception("Failed to open destination directory")
+                self._log(f"📂 Opened: {path}")
+            except FileNotFoundError:
+                # Most common failure on minimal Linux installs (servers,
+                # containers, fresh Arch). xdg-utils ships the binary.
+                self._log(
+                    "❌ 'xdg-open' not found — is xdg-utils installed? "
+                    "On Debian/Ubuntu: sudo apt install xdg-utils"
+                )
+            except subprocess.CalledProcessError as e:
+                self._log(f"❌ 'xdg-open' failed (exit {e.returncode})")
+            except OSError as e:
+                self._log(f"❌ Could not open directory: {e}")
+                logger.exception("Failed to open destination on Linux")
     
     def _log(self, message: str) -> None:
         """Add message to the output log."""

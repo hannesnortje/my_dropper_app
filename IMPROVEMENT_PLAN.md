@@ -31,7 +31,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 3.4 [M4] Count directory items before move
 - [x] 3.5 [M5] Tighten JSON filename parsing
 - [x] 3.6 [M6] Make confirm-dialog non-blocking from worker perspective
-- [ ] 3.7 [M7] Per-platform "open folder" error messages
+- [x] 3.7 [M7] Per-platform "open folder" error messages
 
 **Phase 4 — Architecture Cleanup**
 - [ ] 4.1 Split `app.py` into focused modules
@@ -276,10 +276,17 @@ Goal: make the codebase easy to keep working on.
 - [x] Commit: `refactor: explicit worker-pause around mid-transfer confirm dialogs`
 
 ### 3.7 [M7] Per-platform "open folder" error messages
-- [ ] Wrap each platform branch (xdg-open / open / startfile) in its own try/except
-- [ ] Specific error: "Couldn't run xdg-open — is xdg-utils installed?"
-- [ ] Add `os.startfile` exception handling for Windows
-- [ ] Commit: `fix: clearer error messages when the platform 'open folder' command fails`
+- [x] Split the single try/except into three platform-specific branches
+- [x] **Linux**: distinguishes `FileNotFoundError` ("`xdg-open` not found — is xdg-utils installed? On Debian/Ubuntu: sudo apt install xdg-utils") from `CalledProcessError` (`xdg-open failed (exit N)`)
+- [x] **macOS**: distinguishes missing `open` (would be extraordinary) from `CalledProcessError`
+- [x] **Windows**: `os.startfile` was previously unguarded — wrapped in try/except so `OSError` no longer crashes the click handler; logs "Could not open in Explorer: …"
+- [x] 5 tests in `test_open_destination.py`:
+  - [x] Linux missing xdg-open → install hint visible in log
+  - [x] Linux xdg-open exit-nonzero → `(exit 4)` reported
+  - [x] Linux success → `📂 Opened:` logged
+  - [x] Windows startfile OSError → caught, logged with cause
+  - [x] Windows startfile success → `📂 Opened:` logged
+- [x] Commit: `fix: clearer error messages when the platform 'open folder' command fails`
 
 ---
 
