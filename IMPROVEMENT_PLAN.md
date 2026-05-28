@@ -39,7 +39,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 
 **Phase 5 — UX & Accessibility**
 - [x] 5.1 [L3] Keyboard shortcuts
-- [x] 5.2 [L4] Accessibility names and descriptions
+- [x] 5.2 [L4] Accessibility names and descriptions (+ tooltips with shortcut hints)
 - [ ] 5.3 [L1] Bound the output log
 - [ ] 5.4 [L2] Tidy `_apply_theme`
 - [ ] 5.5 [L7] Robust text-drop encoding
@@ -359,6 +359,9 @@ Goal: usable by keyboard, by screen readers, by non-English users.
 - [x] New `tests/test_accessibility.py` constructs the widget and asserts every named widget has non-empty `accessibleName` AND `accessibleDescription` — protects against future additions that forget a11y wiring
 - [ ] *Defer:* manual verification with Orca (or equivalent on your platform) — recommended next time you run the app
 - [x] Commit: `feat: add accessible names and descriptions to all interactive widgets`
+- [x] **Bonus** (user-requested): `setToolTip` added to every interactive widget, with keyboard shortcut hints in parentheses (e.g. `Choose destination folder… (Ctrl+O)`, `Stop the running transfer (Esc)`, `Clear the activity log (Ctrl+L)`)
+- [x] Extended `test_accessibility.py` to also assert tooltips exist on every control (display widgets like the progress bar and log are excluded)
+- [x] Commit: `feat: add hover tooltips with keyboard shortcut hints`
 
 ### 5.3 [L1] Bound the output log
 - [ ] Add `MAX_LOG_LINES = 5000` constant

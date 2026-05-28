@@ -18,22 +18,26 @@ def test_every_interactive_widget_has_accessibility_metadata(qtbot) -> None:
     widget = FileDropperApp()
     qtbot.addWidget(widget)
 
-    # Each tuple: (attribute path on widget, human label for assertion error)
+    # Each tuple: (attribute path on widget, human label, expect_tooltip)
+    # progress_bar and output_text are displays, not controls — no tooltip
+    # expected. Everything else is hover-discoverable.
     expected = [
-        ("dark_mode_checkbox",   "dark mode checkbox"),
-        ("destination_combo",    "destination combo"),
-        ("open_dest_button",     "open-destination button"),
-        ("copy_radio",           "copy radio"),
-        ("move_radio",           "move radio"),
-        ("drop_label",           "drop zone label"),
-        ("cancel_button",        "cancel button"),
-        ("progress_bar",         "progress bar"),
-        ("output_text",          "output log"),
+        ("dark_mode_checkbox",   "dark mode checkbox",     True),
+        ("destination_combo",    "destination combo",      True),
+        ("open_dest_button",     "open-destination button", True),
+        ("copy_radio",           "copy radio",             True),
+        ("move_radio",           "move radio",             True),
+        ("drop_label",           "drop zone label",        True),
+        ("cancel_button",        "cancel button",          True),
+        ("progress_bar",         "progress bar",           False),
+        ("output_text",          "output log",             False),
     ]
 
-    for attr, label in expected:
+    for attr, label, expect_tooltip in expected:
         target = getattr(widget, attr)
         name = target.accessibleName()
         desc = target.accessibleDescription()
         assert name, f"{label} has no accessibleName"
         assert desc, f"{label} has no accessibleDescription"
+        if expect_tooltip:
+            assert target.toolTip(), f"{label} has no toolTip"

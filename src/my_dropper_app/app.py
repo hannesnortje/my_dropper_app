@@ -167,6 +167,9 @@ class FileDropperApp(QWidget):
         self.dark_mode_checkbox.setAccessibleDescription(
             "Switch between light and dark themes"
         )
+        self.dark_mode_checkbox.setToolTip(
+            "Switch between light and dark themes (Ctrl+D)"
+        )
         header_layout.addWidget(self.dark_mode_checkbox)
 
         main_layout.addLayout(header_layout)
@@ -196,6 +199,9 @@ class FileDropperApp(QWidget):
         self.destination_combo.setAccessibleDescription(
             "Currently selected destination folder and recent choices"
         )
+        self.destination_combo.setToolTip(
+            "Currently selected destination, plus recent choices"
+        )
         settings_layout.addWidget(self.destination_combo, 1)
 
         browse_button = QPushButton("Browse...")
@@ -206,12 +212,15 @@ class FileDropperApp(QWidget):
         browse_button.setAccessibleDescription(
             "Open a folder picker to choose where dropped files are saved"
         )
+        browse_button.setToolTip("Choose destination folder… (Ctrl+O)")
         settings_layout.addWidget(browse_button)
 
         self.open_dest_button = QPushButton("📂 Open")
         self.open_dest_button.setObjectName("secondaryButton")
         self.open_dest_button.setFixedWidth(80)
-        self.open_dest_button.setToolTip("Open destination folder")
+        self.open_dest_button.setToolTip(
+            "Open destination folder in the system file manager"
+        )
         self.open_dest_button.clicked.connect(self._open_destination)
         self.open_dest_button.setAccessibleName("Open destination folder")
         self.open_dest_button.setAccessibleDescription(
@@ -236,6 +245,7 @@ class FileDropperApp(QWidget):
         self.copy_radio.setAccessibleDescription(
             "Copy dropped files to the destination, leaving the source in place"
         )
+        self.copy_radio.setToolTip("Copy dropped files (leaves the source in place)")
         mode_layout.addWidget(self.copy_radio)
 
         self.move_radio = QCheckBox("✂️ Move files")
@@ -245,6 +255,7 @@ class FileDropperApp(QWidget):
         self.move_radio.setAccessibleDescription(
             "Move dropped files to the destination, removing them from the source"
         )
+        self.move_radio.setToolTip("Move dropped files (removes them from the source)")
         mode_layout.addWidget(self.move_radio)
 
         mode_layout.addStretch()
@@ -259,6 +270,9 @@ class FileDropperApp(QWidget):
         self.drop_label.setAccessibleName("Drop zone")
         self.drop_label.setAccessibleDescription(
             "Drop files, folders, or text here to save them to the destination folder"
+        )
+        self.drop_label.setToolTip(
+            "Drop files, folders, or text here — they go to the destination above"
         )
         main_layout.addWidget(self.drop_label)
 
@@ -282,6 +296,7 @@ class FileDropperApp(QWidget):
         self.cancel_button.setAccessibleDescription(
             "Stop the file operation that is currently running"
         )
+        self.cancel_button.setToolTip("Stop the running transfer (Esc)")
         progress_header.addWidget(self.cancel_button)
 
         progress_layout.addLayout(progress_header)
@@ -324,6 +339,7 @@ class FileDropperApp(QWidget):
         clear_button.setAccessibleDescription(
             "Erase the contents of the activity log above"
         )
+        clear_button.setToolTip("Clear the activity log (Ctrl+L)")
         button_layout.addWidget(clear_button)
 
         button_layout.addStretch()
