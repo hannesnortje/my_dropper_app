@@ -27,7 +27,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 **Phase 3 — Code Hygiene & Maintainability**
 - [x] 3.1 [M1] Extract magic numbers to named constants
 - [x] 3.2 [M2] Consolidate destination-directory creation
-- [ ] 3.3 [M3] Remove unused imports & constants
+- [x] 3.3 [M3] Remove unused imports & constants
 - [ ] 3.4 [M4] Count directory items before move
 - [ ] 3.5 [M5] Tighten JSON filename parsing
 - [ ] 3.6 [M6] Make confirm-dialog non-blocking from worker perspective
@@ -237,10 +237,16 @@ Goal: make the codebase easy to keep working on.
 - [x] Commit: `refactor: consolidate destination-mkdir logic into single helper`
 
 ### 3.3 [M3] Remove unused imports & constants
-- [ ] Remove unused: `QLineEdit`, `QSize`, `QPoint`, `QStyle`
-- [ ] Either USE `SETTINGS_WINDOW_STATE` (save window state alongside geometry) or remove it
-- [ ] Run `ruff check --select F401` to verify nothing else lingers
-- [ ] Commit: `refactor: remove unused imports and dead constants`
+- [x] Removed 10 unused imports (ruff F401 caught 6 more than the plan listed):
+  - From `typing`: `Dict`, `Any`
+  - From `PyQt6.QtWidgets`: `QLineEdit`, `QStyle`
+  - From `PyQt6.QtCore`: `QUrl`, `QSize`, `QPoint`
+  - From `PyQt6.QtGui`: `QPalette`, `QColor`, `QIcon`
+- [x] Removed `SETTINGS_WINDOW_STATE` constant (decision: remove rather than wire up — `saveGeometry()` already captures maximize/minimize state on modern Qt; adding `saveState()` would require QMainWindow patterns this app doesn't use)
+- [x] Note: `QLineEdit` appears in stylesheet strings (CSS selectors) but those don't count as Python references — the import itself was unused
+- [x] `ruff check --select F401 src/` reports "All checks passed!"
+- [x] All 63 tests still pass
+- [x] Commit: `refactor: remove unused imports and dead constants`
 
 ### 3.4 [M4] Count directory items before move
 - [ ] Move the `op.source.rglob('*')` count call BEFORE `shutil.move(...)`

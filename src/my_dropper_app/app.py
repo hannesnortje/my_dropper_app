@@ -29,20 +29,20 @@ import subprocess
 import platform
 import threading
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit,
-    QPushButton, QMessageBox, QFileDialog, QLineEdit, QProgressBar,
-    QCheckBox, QFrame, QSizePolicy, QComboBox, QStyle
+    QPushButton, QMessageBox, QFileDialog, QProgressBar,
+    QCheckBox, QFrame, QSizePolicy, QComboBox,
 )
 from PyQt6.QtCore import (
-    Qt, QUrl, QEvent, pyqtSignal, QThread, QSettings, QSize, QPoint
+    Qt, QEvent, pyqtSignal, QThread, QSettings,
 )
 from PyQt6.QtGui import (
-    QDragEnterEvent, QDropEvent, QPalette, QColor, QFont, QIcon
+    QDragEnterEvent, QDropEvent, QFont,
 )
 
 # =============================================================================
@@ -60,7 +60,6 @@ ORG_NAME = "CeruleanCircle"
 # Settings keys
 SETTINGS_DEST_DIR = "destination_directory"
 SETTINGS_WINDOW_GEOMETRY = "window_geometry"
-SETTINGS_WINDOW_STATE = "window_state"
 SETTINGS_DARK_MODE = "dark_mode"
 SETTINGS_OPERATION_MODE = "operation_mode"
 SETTINGS_RECENT_DESTINATIONS = "recent_destinations"
