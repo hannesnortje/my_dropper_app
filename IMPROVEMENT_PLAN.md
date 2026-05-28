@@ -17,7 +17,7 @@ Tick the box when the entire sub-section's tasks are done. Use this as your dash
 - [x] 1.3 Add a minimal CI workflow
 
 **Phase 2 — High-Severity Bug Fixes**
-- [ ] 2.1 [H1] Cap the collision-rename loop
+- [x] 2.1 [H1] Cap the collision-rename loop
 - [ ] 2.2 [H2] Make cancellation thread-safe
 - [ ] 2.3 [H3] Validate destinations on change
 - [ ] 2.4 [H4] Filter stale recent destinations
@@ -128,14 +128,17 @@ Goal: one source of truth, basic test coverage so future changes don't silently 
 Goal: close the latent bugs identified in the evaluation.
 
 ### 2.1 [H1] Cap the collision-rename loop
-- [ ] Locate the `while True` in `_get_unique_destination` (≈ app.py:583)
-- [ ] Locate the second `while True` for filename generation (≈ app.py:1097)
-- [ ] Define `MAX_COLLISION_ATTEMPTS = 10_000` as a module-level constant
-- [ ] Replace `while True` with `for i in range(1, MAX_COLLISION_ATTEMPTS + 1):`
-- [ ] Raise a descriptive `RuntimeError` if exhausted
-- [ ] Catch the error in the worker and surface it as a user-visible log line
-- [ ] Add test: 10 001 collisions → user sees clear error, no hang
-- [ ] Commit: `fix: cap filename-collision loop to prevent thread hang`
+- [x] Locate the `while ... .exists()` in `_get_unique_destination` (app.py:587)
+- [x] Locate the second `while True` for filename generation (app.py:1097)
+- [x] Define `MAX_COLLISION_ATTEMPTS = 10_000` as a module-level constant
+- [x] Replace worker loop with `for counter in range(1, MAX_COLLISION_ATTEMPTS + 1):`
+- [x] Replace text-drop loop with `for counter in range(MAX_COLLISION_ATTEMPTS + 1):` (counter 0 = original name)
+- [x] Raise a descriptive `RuntimeError` if worker exhausts attempts
+- [x] Catch `RuntimeError` in worker `run()` and surface it as a user-visible log line (separate branch from generic Exception)
+- [x] Text-drop path handles exhaustion inline (logs + critical dialog, returns cleanly)
+- [x] Add test: exhausting cap raises `RuntimeError` (monkeypatched to 3 for speed)
+- [x] Add test: boundary case — last attempt succeeds when free slot exists at the cap
+- [x] Commit: `fix: cap filename-collision loop to prevent thread hang`
 
 ### 2.2 [H2] Make cancellation thread-safe
 - [ ] Replace `self._cancelled: bool` with `self._cancelled = threading.Event()` (or `QAtomicInt`)

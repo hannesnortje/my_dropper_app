@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from my_dropper_app import app as app_module
 from my_dropper_app.app import FileOperationWorker
 
 # The method does not touch `self` — calling it as an unbound method with
@@ -62,4 +65,36 @@ def test_directory_collision(tmp_path: Path) -> None:
     result = _unique(None, existing)
 
     assert result == tmp_path / "photos (1)"
+    assert not result.exists()
+
+
+def test_exhausting_max_attempts_raises_runtime_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # Shrink the cap so we can saturate it cheaply
+    monkeypatch.setattr(app_module, "MAX_COLLISION_ATTEMPTS", 3)
+
+    # Create the original plus all three collision slots (1), (2), (3)
+    (tmp_path / "doc.txt").write_text("0")
+    (tmp_path / "doc (1).txt").write_text("1")
+    (tmp_path / "doc (2).txt").write_text("2")
+    (tmp_path / "doc (3).txt").write_text("3")
+
+    with pytest.raises(RuntimeError, match="Too many filename collisions"):
+        _unique(None, tmp_path / "doc.txt")
+
+
+def test_succeeds_at_boundary_of_max_attempts(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # With cap=3 and only (1) and (2) taken, (3) must succeed
+    monkeypatch.setattr(app_module, "MAX_COLLISION_ATTEMPTS", 3)
+
+    (tmp_path / "doc.txt").write_text("0")
+    (tmp_path / "doc (1).txt").write_text("1")
+    (tmp_path / "doc (2).txt").write_text("2")
+
+    result = _unique(None, tmp_path / "doc.txt")
+
+    assert result == tmp_path / "doc (3).txt"
     assert not result.exists()

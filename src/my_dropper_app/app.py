@@ -68,6 +68,7 @@ SETTINGS_RECENT_DESTINATIONS = "recent_destinations"
 DEFAULT_DEST_DIR = Path.home() / "DroppedFiles_QT6"
 MAX_RECENT_DESTINATIONS = 5
 MAX_FILE_SIZE_WARNING_MB = 1000  # Warn if single file > 1GB
+MAX_COLLISION_ATTEMPTS = 10_000  # Cap on " (N)" / "_NNN" filename rename attempts
 
 # Logging setup
 logging.basicConfig(
@@ -494,6 +495,13 @@ class FileOperationWorker(QThread):
                 self.log_message.emit(error_msg)
                 result.fail_count += 1
                 result.errors.append(str(e))
+            except RuntimeError as e:
+                # Raised by _get_unique_destination when MAX_COLLISION_ATTEMPTS
+                # is exhausted; surface a clear, non-"unexpected" message.
+                error_msg = f"❌ {op.source.name}: {e}"
+                self.log_message.emit(error_msg)
+                result.fail_count += 1
+                result.errors.append(str(e))
             except Exception as e:
                 error_msg = f"❌ Unexpected error for {op.source.name}: {e}"
                 self.log_message.emit(error_msg)
@@ -575,20 +583,28 @@ class FileOperationWorker(QThread):
         shutil.copystat(source, dest)
     
     def _get_unique_destination(self, dest: Path) -> Path:
-        """Get a unique destination path, renaming if necessary."""
+        """Get a unique destination path, renaming if necessary.
+
+        Raises RuntimeError if a free name cannot be found within
+        MAX_COLLISION_ATTEMPTS — protects the worker thread from hanging
+        when a destination has accumulated pathological collisions.
+        """
         if not dest.exists():
             return dest
-        
+
         stem = dest.stem
         suffix = dest.suffix
         parent = dest.parent
-        counter = 1
-        
-        while dest.exists():
-            dest = parent / f"{stem} ({counter}){suffix}"
-            counter += 1
-        
-        return dest
+
+        for counter in range(1, MAX_COLLISION_ATTEMPTS + 1):
+            candidate = parent / f"{stem} ({counter}){suffix}"
+            if not candidate.exists():
+                return candidate
+
+        raise RuntimeError(
+            f"Too many filename collisions for {dest.name}: "
+            f"gave up after {MAX_COLLISION_ATTEMPTS} attempts"
+        )
 
 
 # =============================================================================
@@ -1091,20 +1107,35 @@ class FileDropperApp(QWidget):
         
         # Determine filename from content
         filename_base, extension = self._parse_text_for_filename(text_data)
-        
-        # Generate unique filename
-        counter = 0
-        while True:
+
+        # Generate unique filename (bounded to avoid hanging on pathological
+        # destinations — see MAX_COLLISION_ATTEMPTS)
+        file_path: Optional[Path] = None
+        filename = ""
+        for counter in range(MAX_COLLISION_ATTEMPTS + 1):
             if counter == 0:
                 filename = f"{filename_base}.{extension}"
             else:
                 filename = f"{filename_base}_{counter:03d}.{extension}"
-            
-            file_path = self.destination_directory / filename
-            if not file_path.exists():
+            candidate = self.destination_directory / filename
+            if not candidate.exists():
+                file_path = candidate
                 break
-            counter += 1
-        
+
+        if file_path is None:
+            self._log(
+                f"❌ Too many existing files like '{filename_base}.{extension}' "
+                f"(>{MAX_COLLISION_ATTEMPTS}) — please clean up the destination."
+            )
+            QMessageBox.critical(
+                self,
+                "Too many collisions",
+                f"Could not find a free filename after "
+                f"{MAX_COLLISION_ATTEMPTS} attempts. Please clean up the "
+                f"destination directory and try again.",
+            )
+            return
+
         # Save file
         try:
             file_path.write_text(text_data, encoding='utf-8')
