@@ -16,7 +16,7 @@ from typing import List, Optional
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from .constants import COPY_CHUNK_SIZE, LARGE_FILE_THRESHOLD
-from .models import FileOperation, OperationMode, OperationResult
+from .models import CollisionAction, FileOperation, OperationMode, OperationResult
 from .parsing import get_unique_destination
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,11 @@ class FileOperationWorker(QThread):
     progress_updated = pyqtSignal(int, int, str)  # current, total, message
     operation_completed = pyqtSignal(OperationResult)
     log_message = pyqtSignal(str)
+    # Emitted from the worker thread when a destination already exists. The
+    # UI slot pops a Replace / Keep both / Cancel dialog and feeds the
+    # answer back via set_collision_response(). The worker blocks on
+    # _collision_event in between.
+    collision_detected = pyqtSignal(Path, Path)  # source, destination
 
     def __init__(
         self,
@@ -42,15 +47,74 @@ class FileOperationWorker(QThread):
         # relationship rather than relying on CPython-specific atomicity
         # of a bare bool.
         self._cancelled = threading.Event()
+        # Collision-prompt plumbing. The worker emits collision_detected,
+        # waits on _collision_event for the UI thread to call
+        # set_collision_response(), then reads _collision_action.
+        self._collision_event = threading.Event()
+        self._collision_action: Optional[CollisionAction] = None
+        self._collision_apply_to_all: bool = False
 
     def cancel(self) -> None:
         """Request cancellation of the operation."""
         self._cancelled.set()
+        # Wake any thread blocked in _resolve_collision so it can observe
+        # the cancellation and return CANCEL promptly.
+        self._collision_event.set()
         logger.info("File operation cancellation requested")
 
     def is_cancelled(self) -> bool:
         """Return True if cancellation has been requested."""
         return self._cancelled.is_set()
+
+    def set_collision_response(
+        self,
+        action: CollisionAction,
+        apply_to_all: bool = False,
+    ) -> None:
+        """Called from the UI thread after the user answers the prompt.
+
+        Stores the chosen action (and whether it should be reused for the
+        rest of this batch) and unblocks _resolve_collision.
+        """
+        self._collision_action = action
+        self._collision_apply_to_all = apply_to_all
+        self._collision_event.set()
+
+    def _resolve_collision(self, source: Path, dest: Path) -> CollisionAction:
+        """Block until the UI thread answers the collision prompt.
+
+        If the user previously ticked "Apply to all remaining", the cached
+        answer is reused without prompting again. If cancellation is
+        requested mid-wait, returns CANCEL so the caller can skip the
+        item cleanly. If no UI slot is connected to collision_detected
+        (headless tests, scripted use), fall back to KEEP_BOTH so the
+        worker doesn't block waiting for a reply that will never come.
+        """
+        if self._collision_apply_to_all and self._collision_action is not None:
+            return self._collision_action
+
+        # No listener → preserve the pre-prompt behaviour (auto-rename via
+        # get_unique_destination, which is what KEEP_BOTH triggers in the
+        # caller).
+        if self.receivers(self.collision_detected) == 0:
+            return CollisionAction.KEEP_BOTH
+
+        self._collision_event.clear()
+        self._collision_action = None
+        self.collision_detected.emit(source, dest)
+
+        # Poll loop — short timeout so an Esc / window-close mid-prompt
+        # is observed within ~100 ms even if the user never clicks a
+        # button. cancel() also sets _collision_event so the wait exits
+        # immediately in that case.
+        while not self._collision_event.is_set():
+            if self._cancelled.is_set():
+                return CollisionAction.CANCEL
+            self._collision_event.wait(timeout=0.1)
+
+        if self._cancelled.is_set():
+            return CollisionAction.CANCEL
+        return self._collision_action or CollisionAction.KEEP_BOTH
 
     def run(self) -> None:
         """Execute file operations in background."""
@@ -111,7 +175,9 @@ class FileOperationWorker(QThread):
 
     def _process_file(self, op: FileOperation, result: OperationResult) -> None:
         """Process a single file operation."""
-        dest_path = get_unique_destination(op.destination)
+        dest_path = self._resolve_destination(op, result)
+        if dest_path is None:
+            return  # user chose Cancel for this item
         file_size = op.source.stat().st_size
 
         if self.mode == OperationMode.COPY:
@@ -135,7 +201,9 @@ class FileOperationWorker(QThread):
 
     def _process_directory(self, op: FileOperation, result: OperationResult) -> None:
         """Process a directory operation (recursive copy/move)."""
-        dest_path = get_unique_destination(op.destination)
+        dest_path = self._resolve_destination(op, result)
+        if dest_path is None:
+            return  # user chose Cancel for this item
 
         # Count items BEFORE the operation — after a successful move the
         # source no longer exists, so counting afterwards silently yields 0.
@@ -160,6 +228,50 @@ class FileOperationWorker(QThread):
             self.log_message.emit(f"✓ {action} directory: {op.source.name} ({item_count} items)")
 
         result.success_count += 1
+
+    def _resolve_destination(
+        self,
+        op: FileOperation,
+        result: OperationResult,
+    ) -> Optional[Path]:
+        """Resolve op.destination, prompting on collisions.
+
+        Returns the path to write to (possibly with a " (N)" suffix), or
+        None if the user chose Cancel — in which case `result` is updated
+        and a log line is emitted so the caller can simply return.
+        """
+        if not op.destination.exists():
+            return op.destination
+
+        action = self._resolve_collision(op.source, op.destination)
+
+        if action == CollisionAction.CANCEL:
+            result.skipped_count += 1
+            self.log_message.emit(
+                f"⏭ Skipped (user chose to cancel): {op.source.name}"
+            )
+            return None
+
+        if action == CollisionAction.REPLACE:
+            # Remove the existing entry so copy/move lands cleanly.
+            # rmtree on a non-empty directory is destructive — the prompt
+            # default is Keep Both, so the user actively opted in.
+            try:
+                if op.destination.is_dir() and not op.destination.is_symlink():
+                    shutil.rmtree(op.destination)
+                else:
+                    op.destination.unlink()
+            except OSError as e:
+                self.log_message.emit(
+                    f"❌ Could not remove existing {op.destination.name}: {e}"
+                )
+                result.fail_count += 1
+                result.errors.append(str(e))
+                return None
+            return op.destination
+
+        # KEEP_BOTH — fall back to the existing rename-with-suffix flow
+        return get_unique_destination(op.destination)
 
     def _chunked_copy(self, source: Path, dest: Path, total_size: int) -> None:
         """Copy file in chunks for better progress reporting."""

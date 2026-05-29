@@ -25,6 +25,13 @@ class OperationStatus(Enum):
     CANCELLED = auto()
 
 
+class CollisionAction(Enum):
+    """User's choice when a drop would overwrite an existing destination."""
+    REPLACE = auto()
+    KEEP_BOTH = auto()
+    CANCEL = auto()
+
+
 @dataclass
 class FileOperation:
     """A single source → destination operation queued for the worker."""

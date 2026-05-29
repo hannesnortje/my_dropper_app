@@ -56,7 +56,7 @@ from .constants import (
     SETTINGS_WINDOW_GEOMETRY,
     WORKER_SHUTDOWN_TIMEOUT_MS,
 )
-from .models import FileOperation, OperationMode, OperationResult
+from .models import CollisionAction, FileOperation, OperationMode, OperationResult
 from .parsing import (
     parse_text_for_filename,
     prune_stale_destinations,
@@ -762,6 +762,7 @@ class FileDropperApp(QWidget):
         self.worker.progress_updated.connect(self._on_progress_updated)
         self.worker.operation_completed.connect(self._on_operation_completed)
         self.worker.log_message.connect(self._log)
+        self.worker.collision_detected.connect(self._on_collision_detected)
 
         # Show progress UI
         self.progress_bar.setVisible(True)
@@ -828,6 +829,90 @@ class FileDropperApp(QWidget):
 
         self.worker = None
 
+    # =========================================================================
+    # Collision Prompt
+    # =========================================================================
+
+    def _build_collision_dialog(self, filename: str) -> tuple:
+        """Build the shared "File Already Exists" dialog.
+
+        Returns (msg, buttons_dict). The caller is responsible for
+        calling exec() and mapping msg.clickedButton() → CollisionAction
+        via buttons_dict. Centralizing the construction keeps the text-
+        drop and file-drop paths visually identical.
+        """
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setWindowTitle("File Already Exists")
+        msg.setText(f"<b>{filename}</b> already exists in the destination folder.")
+        msg.setInformativeText("What would you like to do?")
+
+        # Order matters for visual layout: Replace (destructive) on the
+        # left, Keep Both (accept, default) in the middle, Cancel on the
+        # right. Qt may re-order by ButtonRole on some platforms; the
+        # role is what matters for keyboard defaults and Esc handling.
+        replace_btn = msg.addButton(
+            "Replace", QMessageBox.ButtonRole.DestructiveRole
+        )
+        keep_both_btn = msg.addButton(
+            "Keep Both", QMessageBox.ButtonRole.AcceptRole
+        )
+        cancel_btn = msg.addButton(
+            "Cancel", QMessageBox.ButtonRole.RejectRole
+        )
+        # Default = Keep Both: matches the pre-existing behaviour, so a
+        # user spamming Enter on bulk drops gets the safe, additive
+        # outcome rather than mass overwrites.
+        msg.setDefaultButton(keep_both_btn)
+
+        checkbox = QCheckBox("Apply to all remaining files")
+        msg.setCheckBox(checkbox)
+
+        return msg, {
+            "replace": replace_btn,
+            "keep_both": keep_both_btn,
+            "cancel": cancel_btn,
+            "checkbox": checkbox,
+        }
+
+    def _prompt_collision(self, filename: str) -> CollisionAction:
+        """Show the collision dialog on the UI thread and return the choice.
+
+        Used by the text-drop path which already runs on the UI thread.
+        File drops route through _on_collision_detected instead, since
+        they're driven from the worker thread.
+        """
+        msg, buttons = self._build_collision_dialog(filename)
+        msg.exec()
+        clicked = msg.clickedButton()
+        if clicked is buttons["replace"]:
+            return CollisionAction.REPLACE
+        if clicked is buttons["cancel"]:
+            return CollisionAction.CANCEL
+        return CollisionAction.KEEP_BOTH
+
+    def _on_collision_detected(self, source: Path, destination: Path) -> None:
+        """Slot for worker.collision_detected — prompts and feeds the answer back.
+
+        Runs on the UI thread (auto-connect from a worker-thread signal
+        uses QueuedConnection), so the QMessageBox is safe to show here.
+        The worker is blocked in _resolve_collision until we call
+        set_collision_response().
+        """
+        if self.worker is None:
+            return
+        msg, buttons = self._build_collision_dialog(destination.name)
+        msg.exec()
+        clicked = msg.clickedButton()
+        if clicked is buttons["replace"]:
+            action = CollisionAction.REPLACE
+        elif clicked is buttons["cancel"]:
+            action = CollisionAction.CANCEL
+        else:
+            action = CollisionAction.KEEP_BOTH
+        apply_to_all = buttons["checkbox"].isChecked()
+        self.worker.set_collision_response(action, apply_to_all)
+
     def _process_dropped_text(self, text_data: str) -> None:
         """Process dropped text data."""
         self._log(f"📝 Received text ({len(text_data)} characters)")
@@ -838,19 +923,36 @@ class FileDropperApp(QWidget):
         # Determine filename from content (pure helper in parsing.py)
         filename_base, extension = parse_text_for_filename(text_data, log=self._log)
 
-        # Generate unique filename (bounded to avoid hanging on pathological
-        # destinations — see MAX_COLLISION_ATTEMPTS)
+        # First-choice filename. If it collides, ask the user before
+        # falling back to the _001/_002 suffix loop.
+        primary = self.destination_directory / f"{filename_base}.{extension}"
         file_path: Optional[Path] = None
         filename = ""
-        for counter in range(MAX_COLLISION_ATTEMPTS + 1):
-            if counter == 0:
-                filename = f"{filename_base}.{extension}"
-            else:
-                filename = f"{filename_base}_{counter:03d}.{extension}"
-            candidate = self.destination_directory / filename
-            if not candidate.exists():
-                file_path = candidate
-                break
+
+        if primary.exists():
+            action = self._prompt_collision(primary.name)
+            if action == CollisionAction.CANCEL:
+                self._log(f"⏭ Skipped (user chose to cancel): {primary.name}")
+                return
+            if action == CollisionAction.REPLACE:
+                # save_text_utf8_with_fallback uses Path.write_text which
+                # truncates, so we can point it straight at the existing
+                # path with no manual unlink.
+                file_path = primary
+                filename = primary.name
+
+        if file_path is None:
+            # No collision, OR user chose Keep Both — find a free name
+            # via the existing bounded _001/_002… loop.
+            for counter in range(MAX_COLLISION_ATTEMPTS + 1):
+                if counter == 0:
+                    filename = f"{filename_base}.{extension}"
+                else:
+                    filename = f"{filename_base}_{counter:03d}.{extension}"
+                candidate = self.destination_directory / filename
+                if not candidate.exists():
+                    file_path = candidate
+                    break
 
         if file_path is None:
             self._log(
@@ -907,6 +1009,7 @@ class FileDropperApp(QWidget):
                     self.worker.progress_updated.disconnect(self._on_progress_updated)
                     self.worker.operation_completed.disconnect(self._on_operation_completed)
                     self.worker.log_message.disconnect(self._log)
+                    self.worker.collision_detected.disconnect(self._on_collision_detected)
                 except (TypeError, RuntimeError):
                     # disconnect() raises if the signal was already detached;
                     # safe to ignore in shutdown.
