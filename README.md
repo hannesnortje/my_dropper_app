@@ -345,6 +345,11 @@ focused on UI concerns and the pure logic is independently testable.
 
 ## Changelog
 
+### v2.1.1
+
+**UX**
+- ✨ Drops that would overwrite an existing destination now show a **Replace / Keep Both / Cancel** prompt (default = Keep Both) with an "Apply to all remaining" checkbox for batch drops. Applies to both text drops (e.g. WODA `ior:local:` URLs that produce a deterministic `<uuid>.scenario.json`) and file drops.
+
 ### v2.1.0
 
 **Reliability fixes**

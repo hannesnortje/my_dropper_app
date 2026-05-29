@@ -4,7 +4,7 @@ File Dropper & Saver Application
 A modern drag & drop file organizer built with PyQt6.
 """
 
-__version__ = "2.1.0"
+__version__ = "2.1.1"
 __author__ = "Hannes Nortje"
 __license__ = "GPL-3.0-or-later"
 
